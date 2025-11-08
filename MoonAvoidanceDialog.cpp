@@ -6,6 +6,7 @@
 #include <QColorDialog>
 #include <QMessageBox>
 #include <QTableWidgetItem>
+#include <QDebug>
 
 MoonAvoidanceDialog::MoonAvoidanceDialog(QWidget* parent)
 	: QDialog(parent)
@@ -15,8 +16,26 @@ MoonAvoidanceDialog::MoonAvoidanceDialog(QWidget* parent)
 	, okButton(nullptr)
 	, cancelButton(nullptr)
 {
+	qDebug() << "MoonAvoidanceDialog: Constructor called";
+	
+	// Initialize UI first
 	setupUI();
+	
+	qDebug() << "MoonAvoidanceDialog: setupUI completed";
+	
+	// Verify widgets were created
+	if (!tableWidget)
+	{
+		qFatal("MoonAvoidanceDialog: Failed to create tableWidget");
+		return;
+	}
+	
+	qDebug() << "MoonAvoidanceDialog: All widgets created successfully";
+	
 	setWindowTitle("Moon Avoidance Configuration");
+	setMinimumSize(700, 400);
+	
+	qDebug() << "MoonAvoidanceDialog: Constructor finished";
 }
 
 MoonAvoidanceDialog::~MoonAvoidanceDialog()
@@ -74,6 +93,12 @@ void MoonAvoidanceDialog::setupUI()
 
 void MoonAvoidanceDialog::setFilters(const QList<FilterConfig>& filters)
 {
+	if (!tableWidget)
+	{
+		qWarning() << "MoonAvoidanceDialog: tableWidget is null in setFilters";
+		return;
+	}
+	
 	currentFilters = filters;
 	populateTable(filters);
 }
@@ -91,6 +116,11 @@ void MoonAvoidanceDialog::populateTable(const QList<FilterConfig>& filters)
 		return;
 	}
 	
+	// Disconnect signals temporarily to avoid triggering updates during population
+	disconnect(tableWidget, &QTableWidget::cellChanged, this, &MoonAvoidanceDialog::updateFilterFromRow);
+	
+	// Clear existing rows
+	tableWidget->setRowCount(0);
 	tableWidget->setRowCount(filters.size());
 	
 	for (int i = 0; i < filters.size(); ++i)
@@ -128,10 +158,19 @@ void MoonAvoidanceDialog::populateTable(const QList<FilterConfig>& filters)
 		colorItem->setFlags(colorItem->flags() & ~Qt::ItemIsEditable);
 		tableWidget->setItem(i, 6, colorItem);
 	}
+	
+	// Reconnect signals after population is complete
+	connect(tableWidget, &QTableWidget::cellChanged, this, &MoonAvoidanceDialog::updateFilterFromRow);
 }
 
 void MoonAvoidanceDialog::addFilter()
 {
+	if (!tableWidget)
+	{
+		qWarning() << "MoonAvoidanceDialog: tableWidget is null in addFilter";
+		return;
+	}
+	
 	int row = tableWidget->rowCount();
 	tableWidget->insertRow(row);
 	
@@ -193,6 +232,11 @@ void MoonAvoidanceDialog::colorButtonClicked()
 
 QColor MoonAvoidanceDialog::getColorFromRow(int row) const
 {
+	if (!tableWidget || row < 0 || row >= tableWidget->rowCount())
+	{
+		return Qt::white;
+	}
+	
 	QTableWidgetItem* colorItem = tableWidget->item(row, 6);
 	if (colorItem)
 	{
@@ -203,6 +247,11 @@ QColor MoonAvoidanceDialog::getColorFromRow(int row) const
 
 void MoonAvoidanceDialog::setColorForRow(int row, const QColor& color)
 {
+	if (!tableWidget || row < 0 || row >= tableWidget->rowCount())
+	{
+		return;
+	}
+	
 	QTableWidgetItem* colorItem = tableWidget->item(row, 6);
 	if (colorItem)
 	{
@@ -244,6 +293,12 @@ void MoonAvoidanceDialog::updateFilterFromRow(int row)
 
 bool MoonAvoidanceDialog::validateInput()
 {
+	if (!tableWidget)
+	{
+		qWarning() << "MoonAvoidanceDialog: tableWidget is null in validateInput";
+		return false;
+	}
+	
 	// Basic validation - can be expanded
 	for (int i = 0; i < tableWidget->rowCount(); ++i)
 	{

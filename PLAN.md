@@ -69,7 +69,10 @@ Implement a Stellarium dynamic plugin that visualizes moon avoidance zones by dr
    - ✅ Changed dialog creation to stack-based (safer memory management)
    - ✅ Added comprehensive error handling
    - ✅ Added safety checks for null pointers
-   - ⏳ Testing dialog stability
+   - ✅ Disconnected signals during table population to avoid recursive updates
+   - ✅ Added debug logging to trace crash location
+   - ⏳ Investigating crash - need to check Stellarium log for error details
+   - ⏳ May need to simplify dialog or use different approach
 
 ### ⏳ Pending
 
@@ -110,7 +113,11 @@ Implement a Stellarium dynamic plugin that visualizes moon avoidance zones by dr
 | H      | 35        | 7     | 1          | -15    | 5      | Red   |
 
 ### Known Issues
-- Configuration dialog crashes when opened (currently being fixed)
+- ⚠️ Configuration dialog crashes when opened (actively debugging)
+  - Added debug logging to trace crash location
+  - Disconnected signals during table population
+  - Using stack-based dialog creation for safer memory management
+  - Need to check Stellarium log file for crash details
 - Some compiler warnings about missing `override` keywords (non-critical)
 
 ### Next Steps

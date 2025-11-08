@@ -308,6 +308,8 @@ bool MoonAvoidance::configureGui(bool show)
 
 void MoonAvoidance::showConfigurationDialog()
 {
+	qDebug() << "MoonAvoidance: showConfigurationDialog called";
+	
 	// Safety checks
 	if (!config)
 	{
@@ -315,10 +317,13 @@ void MoonAvoidance::showConfigurationDialog()
 		return;
 	}
 	
+	qDebug() << "MoonAvoidance: Config is valid";
+	
 	// Get current filters safely before creating dialog
 	QList<FilterConfig> filters;
 	try {
 		filters = config->getFilters();
+		qDebug() << "MoonAvoidance: Got" << filters.size() << "filters";
 	}
 	catch (...)
 	{
@@ -326,22 +331,38 @@ void MoonAvoidance::showConfigurationDialog()
 		filters = MoonAvoidanceConfig::getDefaultFilters();
 	}
 	
+	qDebug() << "MoonAvoidance: Creating dialog";
+	
 	// Create dialog on the stack to ensure proper cleanup
 	MoonAvoidanceDialog dialog(nullptr);
 	
+	qDebug() << "MoonAvoidance: Dialog created";
+	
 	try {
-		// Set filters before showing
+		qDebug() << "MoonAvoidance: Setting filters";
+		// Ensure dialog is fully constructed before setting filters
+		// Set filters after dialog is created
 		dialog.setFilters(filters);
+		
+		qDebug() << "MoonAvoidance: Filters set, showing dialog";
 		
 		// Show dialog modally
 		dialog.setModal(true);
 		
-		// Execute dialog
-		if (dialog.exec() == QDialog::Accepted)
+		// Execute dialog - this will show it
+		int result = dialog.exec();
+		
+		qDebug() << "MoonAvoidance: Dialog closed with result" << result;
+		
+		if (result == QDialog::Accepted)
 		{
 			QList<FilterConfig> newFilters = dialog.getFilters();
-			config->setFilters(newFilters);
-			config->saveConfiguration();
+			if (!newFilters.isEmpty())
+			{
+				config->setFilters(newFilters);
+				config->saveConfiguration();
+				qDebug() << "MoonAvoidance: Configuration saved";
+			}
 		}
 	}
 	catch (const std::exception& e)
@@ -352,6 +373,8 @@ void MoonAvoidance::showConfigurationDialog()
 	{
 		qWarning() << "MoonAvoidance: Unknown exception in showConfigurationDialog";
 	}
+	
+	qDebug() << "MoonAvoidance: showConfigurationDialog finished";
 }
 
 void MoonAvoidance::setEnabled(bool b)
