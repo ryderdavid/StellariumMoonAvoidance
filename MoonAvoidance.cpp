@@ -315,28 +315,34 @@ void MoonAvoidance::showConfigurationDialog()
 		return;
 	}
 	
+	// Get current filters safely before creating dialog
+	QList<FilterConfig> filters;
 	try {
-		// Always create a new dialog to avoid issues with parent/widget lifecycle
-		// Use nullptr as parent - Qt will handle it as a top-level window
-		MoonAvoidanceDialog* dialog = new MoonAvoidanceDialog(nullptr);
-		
-		// Get current filters safely
-		QList<FilterConfig> filters = config->getFilters();
-		dialog->setFilters(filters);
+		filters = config->getFilters();
+	}
+	catch (...)
+	{
+		qWarning() << "MoonAvoidance: Error getting filters, using defaults";
+		filters = MoonAvoidanceConfig::getDefaultFilters();
+	}
+	
+	// Create dialog on the stack to ensure proper cleanup
+	MoonAvoidanceDialog dialog(nullptr);
+	
+	try {
+		// Set filters before showing
+		dialog.setFilters(filters);
 		
 		// Show dialog modally
-		dialog->setModal(true);
-		dialog->setAttribute(Qt::WA_DeleteOnClose, true);
+		dialog.setModal(true);
 		
-		if (dialog->exec() == QDialog::Accepted)
+		// Execute dialog
+		if (dialog.exec() == QDialog::Accepted)
 		{
-			QList<FilterConfig> newFilters = dialog->getFilters();
+			QList<FilterConfig> newFilters = dialog.getFilters();
 			config->setFilters(newFilters);
 			config->saveConfiguration();
 		}
-		
-		// Dialog will be deleted automatically due to WA_DeleteOnClose
-		// Don't store it in configDialog to avoid issues
 	}
 	catch (const std::exception& e)
 	{

@@ -85,6 +85,12 @@ QList<FilterConfig> MoonAvoidanceDialog::getFilters() const
 
 void MoonAvoidanceDialog::populateTable(const QList<FilterConfig>& filters)
 {
+	if (!tableWidget)
+	{
+		qWarning() << "MoonAvoidanceDialog: tableWidget is null in populateTable";
+		return;
+	}
+	
 	tableWidget->setRowCount(filters.size());
 	
 	for (int i = 0; i < filters.size(); ++i)
