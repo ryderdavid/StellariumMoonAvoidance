@@ -1,0 +1,44 @@
+# Build directories
+build/
+cmake-build-*/
+
+# CMake generated files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
+!CMakeLists.txt
+
+# Compiled binaries
+*.dylib
+*.so
+*.dll
+*.a
+*.lib
+
+# Qt generated files
+*_autogen/
+*.moc
+moc_*.cpp
+qrc_*.cpp
+ui_*.h
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Test executables
+tests/MoonAvoidanceTests
+tests/*.o
+
+# Stellarium plugin installation (user-specific)
+*.ini.user
+
+# Logs
+*.log
+
