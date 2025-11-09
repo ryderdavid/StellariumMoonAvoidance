@@ -15,7 +15,9 @@
 #include <QMetaObject>
 #include <QThread>
 #include <QDebug>
+#include <QPainter>
 #include <QtGlobal> // For qMax, qMin, qBound
+#include <algorithm> // For std::sort
 #include <cmath>
 
 MoonAvoidance::MoonAvoidance()
@@ -287,6 +289,23 @@ void MoonAvoidance::draw(StelCore* core)
 	
 	qDebug() << "MoonAvoidance: draw() called - moon altitude:" << lastMoonAltitude << "degrees, filters:" << filters.size();
 	
+	// Track visible and offscreen circles for label positioning
+	struct VisibleFilterInfo {
+		FilterConfig filter;
+		double sepAngle;
+		double topmostLeftX;  // Leftmost point along the top of the screen
+		double topmostRightX; // Rightmost point along the top of the screen
+		Vec3d topmostLeftPoint3D;
+		Vec3d topmostRightPoint3D;
+	};
+	QList<VisibleFilterInfo> visibleFilters;
+	QList<QPair<QString, double>> offscreenFilters; // Filter name and separation angle
+	
+	// Get projector for screen coordinate calculations
+	StelProjectorP projector = painter.getProjector();
+	if (!projector)
+		return;
+	
 	for (const FilterConfig& filter : filters)
 	{
 		// Altitude check: If moon is within [MinAlt, MaxAlt], relaxation applies
@@ -307,12 +326,383 @@ void MoonAvoidance::draw(StelCore* core)
 		// Only draw if radius is valid and reasonable
 		if (radius > 0.0 && radius < M_PI) // Radius should be less than 180 degrees
 		{
-			// Draw circle
-			drawCircle(painter, moonPos, radius, filter.color);
+			// Draw circle with arrows
+			// Find filter index for staggering arrows by comparing names
+			int filterIndex = -1;
+			for (int idx = 0; idx < filters.size(); ++idx)
+			{
+				if (filters[idx].name == filter.name)
+				{
+					filterIndex = idx;
+					break;
+				}
+			}
+			if (filterIndex < 0)
+				filterIndex = 0; // Fallback to 0 if not found
+			drawCircle(painter, moonPos, radius, filter.color, filter.name, radiusDegrees, filterIndex);
+			
+		// Check if circle is visible and find topmost left and right points
+		bool isVisible = false;
+		double topmostY = -1e9; // Largest Y (topmost in OpenGL coords where Y increases upward)
+		double topmostLeftX = 1e9; // Leftmost X among topmost points
+		double topmostRightX = -1e9; // Rightmost X among topmost points
+		Vec3d topmostLeftPoint3D;
+		Vec3d topmostRightPoint3D;
+		
+		// Get viewport bounds first
+		double vpX = projector->getViewportPosX();
+		double vpY = projector->getViewportPosY();
+		double vpW = projector->getViewportWidth();
+		double vpH = projector->getViewportHeight();
+		
+		// Sample points around circle to find topmost left and right points in screen space
+		const int sampleCount = 128; // Increased for better detection
+			for (int i = 0; i < sampleCount; ++i)
+			{
+				double angle = (2.0 * M_PI * i) / sampleCount;
+				
+				// Calculate point on circle
+				Vec3d moonPosNorm = moonPos;
+				moonPosNorm.normalize();
+				
+				Vec3d north(0, 0, 1);
+				Vec3d east(1, 0, 0);
+				Vec3d perp1 = moonPosNorm ^ north;
+				if (perp1.norm() < 0.1)
+					perp1 = moonPosNorm ^ east;
+				perp1.normalize();
+				Vec3d perp2 = moonPosNorm ^ perp1;
+				perp2.normalize();
+				
+				Vec3d point = moonPosNorm * cos(radius) + 
+				              (perp1 * cos(angle) + perp2 * sin(angle)) * sin(radius);
+				point.normalize();
+				
+				// Project to screen coordinates
+				Vec3d screenPos;
+				if (projector->project(point, screenPos))
+				{
+					// Check if point is in viewport (with some tolerance)
+					if (screenPos[0] >= vpX - 10 && screenPos[0] <= vpX + vpW + 10 &&
+					    screenPos[1] >= vpY - 10 && screenPos[1] <= vpY + vpH + 10)
+					{
+						isVisible = true;
+						// Track points that are actually in viewport
+						if (screenPos[0] >= vpX && screenPos[0] <= vpX + vpW &&
+						    screenPos[1] >= vpY && screenPos[1] <= vpY + vpH)
+						{
+							// In OpenGL coords, Y increases upward, so topmost = largest Y
+							// We want points near the top of the screen (large Y values)
+							// Focus on the top portion of the screen - use a larger threshold
+							// to catch more points near the top
+							double topThreshold = vpY + vpH - 100; // Within 100 pixels of top (increased from 50)
+							
+							if (screenPos[1] >= topThreshold)
+							{
+								// This point is near the top of the screen
+								// Track the topmost points (largest Y) and their leftmost/rightmost X
+								if (screenPos[1] > topmostY)
+								{
+									// New topmost - reset left and right
+									topmostY = screenPos[1];
+									topmostLeftX = screenPos[0];
+									topmostRightX = screenPos[0];
+									topmostLeftPoint3D = point;
+									topmostRightPoint3D = point;
+								}
+								else if (screenPos[1] == topmostY)
+								{
+									// Same Y level - track leftmost and rightmost
+									if (screenPos[0] < topmostLeftX)
+									{
+										topmostLeftX = screenPos[0];
+										topmostLeftPoint3D = point;
+									}
+									if (screenPos[0] > topmostRightX)
+									{
+										topmostRightX = screenPos[0];
+										topmostRightPoint3D = point;
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+			
+			if (isVisible)
+			{
+				// If we found topmost points, use them; otherwise find any visible points
+				if (topmostY < -1e8) // No topmost points found (topmostY was never updated)
+				{
+					// Circle is visible but no points near the top
+					// Re-sample to find leftmost and rightmost visible points anywhere in viewport
+					double leftmostVisibleX = 1e9;
+					double rightmostVisibleX = -1e9;
+					
+					for (int i = 0; i < sampleCount; ++i)
+					{
+						double angle = (2.0 * M_PI * i) / sampleCount;
+						
+						Vec3d moonPosNorm = moonPos;
+						moonPosNorm.normalize();
+						
+						Vec3d north(0, 0, 1);
+						Vec3d east(1, 0, 0);
+						Vec3d perp1 = moonPosNorm ^ north;
+						if (perp1.norm() < 0.1)
+							perp1 = moonPosNorm ^ east;
+						perp1.normalize();
+						Vec3d perp2 = moonPosNorm ^ perp1;
+						perp2.normalize();
+						
+						Vec3d point = moonPosNorm * cos(radius) + 
+						              (perp1 * cos(angle) + perp2 * sin(angle)) * sin(radius);
+						point.normalize();
+						
+						Vec3d screenPos;
+						if (projector->project(point, screenPos))
+						{
+							if (screenPos[0] >= vpX && screenPos[0] <= vpX + vpW &&
+							    screenPos[1] >= vpY && screenPos[1] <= vpY + vpH)
+							{
+								if (screenPos[0] < leftmostVisibleX)
+									leftmostVisibleX = screenPos[0];
+								if (screenPos[0] > rightmostVisibleX)
+									rightmostVisibleX = screenPos[0];
+							}
+						}
+					}
+					
+					// Use the visible points, or viewport edges as final fallback
+					if (leftmostVisibleX < 1e8)
+					{
+						topmostLeftX = leftmostVisibleX;
+						topmostRightX = rightmostVisibleX;
+					}
+					else
+					{
+						// Still no points found - use viewport edges
+						topmostLeftX = vpX;
+						topmostRightX = vpX + vpW;
+					}
+				}
+				
+				// Store visible filter info for drawing after all circles
+				VisibleFilterInfo info;
+				info.filter = filter;
+				info.sepAngle = radiusDegrees;
+				info.topmostLeftX = topmostLeftX;
+				info.topmostRightX = topmostRightX;
+				info.topmostLeftPoint3D = topmostLeftPoint3D;
+				info.topmostRightPoint3D = topmostRightPoint3D;
+				visibleFilters.append(info);
+			}
+			else
+			{
+				// Circle is offscreen - add to list for stacking at left edge
+				offscreenFilters.append(QPair<QString, double>(filter.name, radiusDegrees));
+			}
 		}
 		else
 		{
 			qDebug() << "MoonAvoidance: Invalid radius" << radius << "for filter" << filter.name;
+		}
+	}
+	
+	// Draw visible filter labels at top, ensuring they don't overlap circles
+	// Use StelPainter's drawText(float x, float y, ...) for screen-space text
+	// Track drawn labels for collision detection with offscreen labels
+	struct DrawnLabel {
+		double x, y, width, height;
+	};
+	QList<DrawnLabel> drawnVisibleLabels;
+	
+	for (const VisibleFilterInfo& info : visibleFilters)
+	{
+		QString labelText = QString("%1 safe at %2°").arg(info.filter.name).arg(info.sepAngle, 0, 'f', 1);
+		
+		// Estimate text width (approximate: ~8 pixels per character)
+		// This is a rough estimate - StelPainter doesn't expose text metrics easily
+		// Add safety margin to account for font variations and ensure no overlap
+		double estimatedTextWidth = labelText.length() * 8.0 + 20.0; // Add 20px safety margin
+		double estimatedTextHeight = 20.0; // Approximate text height
+		
+		double vpX = projector->getViewportPosX();
+		double vpW = projector->getViewportWidth();
+		double vpY = projector->getViewportPosY();
+		double vpH = projector->getViewportHeight();
+		
+		// Always prefer left side placement unless it's impossible
+		double padding = 60.0; // Padding between text and circle
+		double minPaddingFromEdge = 40.0; // Padding from screen edge (matches offscreen labels)
+		double labelX;
+		bool canPlaceLabel = false;
+		
+		// Try left side first: place label to the left of circle's topmost left point
+		// Rightmost edge of text should be left of circle's topmost left point
+		labelX = info.topmostLeftX - padding - estimatedTextWidth;
+		
+		// Check if left side placement is possible
+		if (labelX >= vpX + minPaddingFromEdge)
+		{
+			// Left side is possible
+			canPlaceLabel = true;
+		}
+		else
+		{
+			// Left side is impossible - try right side instead
+			// Leftmost edge of text should be right of circle's topmost right point
+			labelX = info.topmostRightX + padding;
+			
+			// Check if right side placement is possible
+			if (labelX + estimatedTextWidth <= vpX + vpW - minPaddingFromEdge)
+			{
+				// Right side is possible
+				canPlaceLabel = true;
+			}
+			// If neither side is possible, canPlaceLabel remains false
+		}
+		
+		// Only draw label if it can be placed properly
+		if (canPlaceLabel)
+		{
+			// StelPainter::drawText uses OpenGL coordinates where Y=0 is at bottom
+			// So we need to invert Y: top of viewport is at vpY + vpH
+			// For top of screen: start at bottom (vpY) and go up by height, then subtract offset
+			double paddingFromTopForVisible = 50.0; // Padding from top (matches offscreen labels)
+			double labelY = vpY + vpH - paddingFromTopForVisible; // Padding from top (in OpenGL coords, Y increases upward)
+			
+			// Set text color to filter color
+			Vec3f textColor(info.filter.color.redF(), info.filter.color.greenF(), info.filter.color.blueF());
+			painter.setColor(textColor, 1.0f);
+			
+			try {
+				// Use StelPainter's screen-space drawText method
+				painter.drawText(static_cast<float>(labelX), static_cast<float>(labelY), labelText, 0.0f);
+				
+				// Track this label for collision detection
+				DrawnLabel drawn;
+				drawn.x = labelX;
+				drawn.y = labelY - estimatedTextHeight; // Y is top in OpenGL coords, so bottom is Y - height
+				drawn.width = estimatedTextWidth;
+				drawn.height = estimatedTextHeight;
+				drawnVisibleLabels.append(drawn);
+			}
+			catch (...)
+			{
+				qWarning() << "MoonAvoidance: Error drawing visible label text";
+			}
+		}
+	}
+	
+	// Draw offscreen labels stacked at left edge
+	// Hide labels that would collide with visible labels or circles
+	if (!offscreenFilters.isEmpty())
+	{
+		double vpX = projector->getViewportPosX();
+		double vpY = projector->getViewportPosY();
+		double vpH = projector->getViewportHeight();
+		double paddingFromTop = 50.0; // Increased padding from top edge
+		double paddingFromLeft = 40.0; // Increased padding from left edge
+		double lineSpacing = 40.0; // Increased spacing between stacked labels
+		double startY = vpY + vpH - paddingFromTop; // Start from top (in OpenGL coords)
+		
+		// Check if any circles are visible near the left edge where offscreen labels are drawn
+		// We'll check if any visible circle has points near the left edge (within 100 pixels)
+		double leftEdgeCheckX = vpX + paddingFromLeft + 100.0; // Check area where offscreen labels are drawn
+		bool hasCircleNearLeftEdge = false;
+		for (const VisibleFilterInfo& info : visibleFilters)
+		{
+			// Check if circle's leftmost point is near the left edge
+			if (info.topmostLeftX < leftEdgeCheckX)
+			{
+				hasCircleNearLeftEdge = true;
+				break;
+			}
+		}
+		
+		for (int i = 0; i < offscreenFilters.size(); ++i)
+		{
+			const QPair<QString, double>& filterInfo = offscreenFilters[i];
+			QString filterName = filterInfo.first;
+			double sepAngle = filterInfo.second;
+			
+			// Find the filter config for color
+			FilterConfig filterConfig;
+			for (const FilterConfig& f : filters)
+			{
+				if (f.name == filterName)
+				{
+					filterConfig = f;
+					break;
+				}
+			}
+			
+			QString labelText = QString("%1 safe at %2°").arg(filterName).arg(sepAngle, 0, 'f', 1);
+			
+			// Calculate label position at left edge, stacked vertically
+			double labelX = vpX + paddingFromLeft; // Padding from left edge
+			double labelY = startY - (i * lineSpacing); // Stack upward from top (in OpenGL coords, Y increases upward)
+			double estimatedTextWidth = labelText.length() * 8.0 + 20.0; // Add 20px safety margin
+			double estimatedTextHeight = 20.0; // Approximate text height
+			
+			// Check for collisions with visible labels
+			bool wouldCollide = false;
+			for (const DrawnLabel& drawn : drawnVisibleLabels)
+			{
+				// Check if offscreen label would overlap with visible label
+				// Using bounding box collision detection
+				double offscreenLeft = labelX;
+				double offscreenRight = labelX + estimatedTextWidth;
+				double offscreenTop = labelY;
+				double offscreenBottom = labelY - estimatedTextHeight;
+				
+				double visibleLeft = drawn.x;
+				double visibleRight = drawn.x + drawn.width;
+				double visibleTop = drawn.y + drawn.height;
+				double visibleBottom = drawn.y;
+				
+				// Check for overlap (with some padding)
+				double collisionPadding = 5.0;
+				if (!(offscreenRight + collisionPadding < visibleLeft || 
+				      offscreenLeft - collisionPadding > visibleRight ||
+				      offscreenBottom - collisionPadding > visibleTop ||
+				      offscreenTop + collisionPadding < visibleBottom))
+				{
+					wouldCollide = true;
+					break;
+				}
+			}
+			
+			// Also check if a circle is visible near the left edge
+			if (!wouldCollide && hasCircleNearLeftEdge)
+			{
+				// Check if this offscreen label's Y position is near where visible circles are
+				// (within the top portion of the screen where labels are drawn)
+				double topThreshold = vpY + vpH - 150.0; // Check top 150 pixels
+				if (labelY >= topThreshold)
+				{
+					wouldCollide = true;
+				}
+			}
+			
+			// Only draw if no collision
+			if (!wouldCollide)
+			{
+				// Set text color to filter color
+				Vec3f textColor(filterConfig.color.redF(), filterConfig.color.greenF(), filterConfig.color.blueF());
+				painter.setColor(textColor, 1.0f);
+				
+				try {
+					// Use StelPainter's screen-space drawText method
+					painter.drawText(static_cast<float>(labelX), static_cast<float>(labelY), labelText, 0.0f);
+				}
+				catch (...)
+				{
+					qWarning() << "MoonAvoidance: Error drawing offscreen label text";
+				}
+			}
 		}
 	}
 }
@@ -466,7 +856,7 @@ double MoonAvoidance::calculateCircleRadius(const FilterConfig& filter, double m
 	return radiusDegrees * M_PI / 180.0;
 }
 
-void MoonAvoidance::drawCircle(StelPainter& painter, const Vec3d& moonPos, double radius, const QColor& color) const
+void MoonAvoidance::drawCircle(StelPainter& painter, const Vec3d& moonPos, double radius, const QColor& color, const QString& filterName, double radiusDegrees, int filterIndex) const
 {
 	// Draw a circle around the moon position
 	// The radius is in radians (angular separation on the sphere)
@@ -504,7 +894,7 @@ void MoonAvoidance::drawCircle(StelPainter& painter, const Vec3d& moonPos, doubl
 	// Draw circle using small circle arcs
 	// For a small circle on a sphere, we use drawSmallCircleArc
 	// Increase segments based on circle size - larger circles need more segments
-	double radiusDegrees = radius * 180.0 / M_PI;
+	// radiusDegrees is already a parameter, use it directly
 	int segments = qMax(256, static_cast<int>(radiusDegrees * 8)); // At least 256, more for larger circles
 	segments = qMin(segments, 1024); // Cap at 1024 for performance
 	const double angleStep = 2.0 * M_PI / segments;
@@ -557,6 +947,259 @@ void MoonAvoidance::drawCircle(StelPainter& painter, const Vec3d& moonPos, doubl
 	}
 	
 	qDebug() << "MoonAvoidance: drawCircle() completed - drew" << segments << "segments";
+	
+	// Draw 6 radial arrows pointing outward from the circle, away from the moon
+	// Arrows are evenly spaced (60 degrees apart), but staggered for each filter circle
+	const int arrowCount = 6;
+	const double arrowSpacing = 2.0 * M_PI / arrowCount;
+	const double arrowLength = 0.03; // ~1.7 degrees outward from circle
+	const double arrowHeadLength = 0.01; // ~0.6 degrees for arrowhead
+	const double arrowHeadAngle = M_PI / 6.0; // 30 degrees for arrowhead
+	
+	// Stagger arrows for each filter circle by rotating them
+	// Each filter gets a different starting angle offset
+	// Offset by 10 degrees per filter index to create a staggered effect
+	const double staggerOffset = (filterIndex * 10.0) * M_PI / 180.0; // Convert to radians
+	
+	// Set color for arrows (same as circle)
+	painter.setColor(colorVec, 1.0f);
+	painter.setLineWidth(2.0f);
+	
+	for (int i = 0; i < arrowCount; ++i)
+	{
+		double angle = i * arrowSpacing + staggerOffset;
+		
+		// Calculate point on the circle
+		Vec3d circlePoint = moonPosNorm * cos(radius) + 
+		                   (perp1 * cos(angle) + perp2 * sin(angle)) * sin(radius);
+		circlePoint.normalize();
+		
+		// Calculate point further out (away from moon) for arrow tip
+		double arrowRadius = radius + arrowLength;
+		if (arrowRadius > M_PI * 0.9)
+			arrowRadius = M_PI * 0.9;
+		
+		Vec3d arrowTip = moonPosNorm * cos(arrowRadius) + 
+		                (perp1 * cos(angle) + perp2 * sin(angle)) * sin(arrowRadius);
+		arrowTip.normalize();
+		
+		// Draw arrow shaft (line from circle to tip)
+		try {
+			painter.drawGreatCircleArc(circlePoint, arrowTip, nullptr);
+		}
+		catch (...)
+		{
+			qWarning() << "MoonAvoidance: Error drawing arrow shaft";
+		}
+		
+		// Draw arrowhead (small triangle at the tip)
+		// Calculate two points for the arrowhead, perpendicular to the arrow direction
+		Vec3d arrowDir = arrowTip - circlePoint;
+		arrowDir.normalize();
+		
+		// Find a perpendicular vector to arrow direction
+		Vec3d perpArrow = moonPosNorm ^ arrowDir;
+		if (perpArrow.norm() < 0.1)
+		{
+			// If arrow is parallel to moon direction, use a different perpendicular
+			perpArrow = perp1 ^ arrowDir;
+		}
+		perpArrow.normalize();
+		
+		// Calculate arrowhead base point (slightly back from tip)
+		double headBaseRadius = arrowRadius - arrowHeadLength;
+		if (headBaseRadius < radius)
+			headBaseRadius = radius;
+		
+		Vec3d headBase = moonPosNorm * cos(headBaseRadius) + 
+		                (perp1 * cos(angle) + perp2 * sin(angle)) * sin(headBaseRadius);
+		headBase.normalize();
+		
+		// Calculate arrowhead side points
+		Vec3d headSide1 = headBase + perpArrow * (arrowHeadLength * 0.5);
+		headSide1.normalize();
+		
+		Vec3d headSide2 = headBase - perpArrow * (arrowHeadLength * 0.5);
+		headSide2.normalize();
+		
+		// Draw arrowhead triangle
+		try {
+			painter.drawGreatCircleArc(arrowTip, headSide1, nullptr);
+			painter.drawGreatCircleArc(arrowTip, headSide2, nullptr);
+			painter.drawGreatCircleArc(headSide1, headSide2, nullptr);
+		}
+		catch (...)
+		{
+			qWarning() << "MoonAvoidance: Error drawing arrowhead";
+		}
+	}
+	
+	// Labels temporarily hidden - user wants to try a different approach
+	/*
+	// Find the best position for the label: middle point of visible segment above horizon
+	// Sample points around the circle and find the middle of the visible arc above horizon
+	StelCore* core = StelApp::getInstance().getCore();
+	if (!core)
+		return;
+	
+	StelProjectorP projector = painter.getProjector();
+	if (!projector)
+		return;
+	
+	QList<double> visibleAngles; // Store angles of visible points above horizon
+	
+	// Sample points around the circle to find visible points above horizon
+	const int sampleCount = 128; // More samples for better accuracy
+	for (int i = 0; i < sampleCount; ++i)
+	{
+		double angle = (2.0 * M_PI * i) / sampleCount;
+		
+		// Calculate point on circle
+		Vec3d point = moonPosNorm * cos(radius) + 
+		              (perp1 * cos(angle) + perp2 * sin(angle)) * sin(radius);
+		point.normalize();
+		
+		// Convert to Alt/Az to check altitude
+		Vec3d altAzPos = core->j2000ToAltAz(point, StelCore::RefractionOff);
+		double alt, az;
+		StelUtils::rectToSphe(&az, &alt, altAzPos);
+		double altitude = alt * 180.0 / M_PI; // Convert to degrees
+		
+		// Check if point is visible in viewport
+		Vec3d screenPos;
+		bool isVisible = projector->project(point, screenPos);
+		
+		// Check if point is within viewport bounds
+		if (isVisible)
+		{
+			double vpX = projector->getViewportPosX();
+			double vpY = projector->getViewportPosY();
+			double vpW = projector->getViewportWidth();
+			double vpH = projector->getViewportHeight();
+			
+			isVisible = (screenPos[0] >= vpX && screenPos[0] <= vpX + vpW &&
+			            screenPos[1] >= vpY && screenPos[1] <= vpY + vpH);
+		}
+		
+		// If point is visible and above horizon, store its angle
+		if (isVisible && altitude > 0.0)
+		{
+			visibleAngles.append(angle);
+		}
+	}
+	
+	// Find the middle angle of the visible segment
+	// This is the geometric middle of the largest continuous arc segment that's visible and above horizon
+	double bestAngle = 0.0;
+	if (!visibleAngles.isEmpty())
+	{
+		// Sort angles to handle wraparound at 0/2π
+		std::sort(visibleAngles.begin(), visibleAngles.end());
+		
+		if (visibleAngles.size() == 1)
+		{
+			bestAngle = visibleAngles[0];
+		}
+		else
+		{
+			// Find the largest gap between consecutive visible angles
+			// This gap represents where the circle is NOT visible
+			// The visible segment is everything else (the complement)
+			double maxGap = 0.0;
+			int maxGapIndex = -1;
+			
+			// Check gaps between consecutive angles
+			for (int i = 0; i < visibleAngles.size() - 1; ++i)
+			{
+				double gap = visibleAngles[i + 1] - visibleAngles[i];
+				if (gap > maxGap)
+				{
+					maxGap = gap;
+					maxGapIndex = i;
+				}
+			}
+			
+			// Check wraparound gap (between last and first)
+			double wrapGap = (2.0 * M_PI - visibleAngles.last()) + visibleAngles.first();
+			
+			if (wrapGap > maxGap)
+			{
+				// Wraparound case: the visible segment wraps around 0/2π
+				// The visible segment is from last angle to first angle (wrapping)
+				// Calculate geometric middle: (last + (first + 2π)) / 2, then normalize
+				double startAngle = visibleAngles.last();
+				double endAngle = visibleAngles.first() + 2.0 * M_PI;
+				bestAngle = (startAngle + endAngle) / 2.0;
+				if (bestAngle >= 2.0 * M_PI)
+					bestAngle -= 2.0 * M_PI;
+			}
+			else if (maxGapIndex >= 0)
+			{
+				// Normal case: the visible segment is continuous
+				// If the largest gap is between angle[i] and angle[i+1], then:
+				// - The gap (not visible) is from angle[i] to angle[i+1]
+				// - The visible segment is from angle[i+1] to angle[i] (wrapping)
+				// - The middle is halfway between angle[i+1] and angle[i] (wrapping)
+				int startIdx = (maxGapIndex + 1) % visibleAngles.size();
+				int endIdx = maxGapIndex;
+				
+				double startAngle = visibleAngles[startIdx];
+				double endAngle = visibleAngles[endIdx];
+				
+				// Since the segment wraps (startIdx comes after endIdx in sorted order),
+				// we need to add 2π to endAngle to calculate the middle correctly
+				// The middle is: (startAngle + (endAngle + 2π)) / 2
+				endAngle += 2.0 * M_PI;
+				
+				bestAngle = (startAngle + endAngle) / 2.0;
+				if (bestAngle >= 2.0 * M_PI)
+					bestAngle -= 2.0 * M_PI;
+			}
+			else
+			{
+				// Fallback: if all angles are evenly spaced, use the middle
+				// Calculate average of all visible angles
+				double sum = 0.0;
+				for (double angle : visibleAngles)
+				{
+					sum += angle;
+				}
+				bestAngle = sum / visibleAngles.size();
+			}
+		}
+	}
+	
+	// Calculate label position at the best angle, offset outward
+	Vec3d labelPoint = moonPosNorm * cos(radius) + 
+	                   (perp1 * cos(bestAngle) + perp2 * sin(bestAngle)) * sin(radius);
+	labelPoint.normalize();
+	
+	// Offset label further outward from the circle for better visibility
+	// Calculate a point slightly further from the moon
+	double labelOffsetRadius = radius + 0.1; // Add ~5.7 degrees offset
+	if (labelOffsetRadius > M_PI * 0.9) // Don't go too far
+		labelOffsetRadius = M_PI * 0.9;
+	
+	Vec3d labelPos = moonPosNorm * cos(labelOffsetRadius) + 
+	                 (perp1 * cos(bestAngle) + perp2 * sin(bestAngle)) * sin(labelOffsetRadius);
+	labelPos.normalize();
+	
+	// Format label text: "SAFE TO SHOOT {FILTER} ({radiusDegrees}°)"
+	QString labelText = QString("SAFE TO SHOOT %1 (%2°)").arg(filterName).arg(radiusDegrees, 0, 'f', 1);
+	
+	// Set text color to match circle color, but ensure it's visible
+	Vec3f textColor(color.redF(), color.greenF(), color.blueF());
+	painter.setColor(textColor, 1.0f);
+	
+	// Draw text at the label position
+	try {
+		painter.drawText(labelPos, labelText, 0.0f, 0.0f, 0.0f, true);
+	}
+	catch (...)
+	{
+		qWarning() << "MoonAvoidance: Error drawing label text";
+	}
+	*/
 	
 	// Restore line width
 	painter.setLineWidth(1.0f);

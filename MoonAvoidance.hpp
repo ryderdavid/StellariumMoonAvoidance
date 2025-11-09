@@ -49,7 +49,7 @@ private:
 	double calculateCircleRadius(const FilterConfig& filter, double moonAltitude, double moonAgeDays) const;
 	
 	// Drawing
-	void drawCircle(StelPainter& painter, const Vec3d& moonPos, double radius, const QColor& color) const;
+	void drawCircle(StelPainter& painter, const Vec3d& moonPos, double radius, const QColor& color, const QString& filterName, double radiusDegrees, int filterIndex) const;
 	
 	// Configuration
 	MoonAvoidanceConfig* config;
