@@ -324,6 +324,7 @@ void MoonAvoidance::draw(StelCore* core)
 		         << "- radius:" << radiusDegrees << "degrees, moon age:" << lastMoonAgeDays << "days";
 		
 		// Only draw if radius is valid and reasonable
+		// Note: radius == 0.0 means avoidance is OFF (relaxed separation <= 0)
 		if (radius > 0.0 && radius < M_PI) // Radius should be less than 180 degrees
 		{
 			// Draw circle with arrows
@@ -755,6 +756,14 @@ double MoonAvoidance::calculateCircleRadius(const FilterConfig& filter, double m
 {
 	// Calculate adjusted separation based on altitude (in degrees)
 	double adjustedSeparation = calculateSeparation(filter, moonAltitude);
+	
+	// If the separation was relaxed into oblivion (negative or zero), avoidance is off
+	// This matches NINA's behavior: "If the separation was relaxed into oblivion, avoidance is off"
+	if (adjustedSeparation <= 0.0)
+	{
+		// Return 0 to indicate no circle should be drawn (avoidance OFF)
+		return 0.0;
+	}
 	
 	// Calculate adjusted width based on altitude (in days)
 	double adjustedWidth = calculateWidth(filter, moonAltitude);
