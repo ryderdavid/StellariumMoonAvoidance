@@ -68,6 +68,8 @@ void MoonAvoidanceConfig::loadConfiguration()
 	// Load filter groups
 	QStringList groups = settings->childGroups();
 	
+	bool hasInvalidValues = false;
+	
 	for (const QString& group : groups)
 	{
 		settings->beginGroup(group);
@@ -78,6 +80,13 @@ void MoonAvoidanceConfig::loadConfiguration()
 		double relaxation = settings->value("Relaxation", 0.0).toDouble();
 		double minAlt = settings->value("MinAlt", -15.0).toDouble();
 		double maxAlt = settings->value("MaxAlt", 5.0).toDouble();
+		
+		// Validate values - check if they're all zeros or invalid
+		if (separation == 0.0 && width == 0.0 && relaxation == 0.0)
+		{
+			hasInvalidValues = true;
+			qWarning() << "MoonAvoidanceConfig: Filter" << name << "has all zero values, will reset to defaults";
+		}
 		
 		// Load color
 		QColor color(Qt::white);
@@ -99,10 +108,13 @@ void MoonAvoidanceConfig::loadConfiguration()
 		settings->endGroup();
 	}
 	
-	// If no filters loaded, use defaults
-	if (filters.isEmpty())
+	// If no filters loaded or all values are invalid, use defaults
+	if (filters.isEmpty() || hasInvalidValues)
 	{
+		qWarning() << "MoonAvoidanceConfig: No valid filters found or invalid values detected, loading defaults";
 		loadDefaults();
+		// Save defaults to config file
+		saveConfiguration();
 	}
 }
 

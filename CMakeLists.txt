@@ -9,6 +9,18 @@ set(STELROOT "" CACHE PATH "Path to Stellarium source root directory")
 set(STELLARIUM_BUILD_DIR "" CACHE PATH "Path to Stellarium build directory")
 
 # Find required packages
+# Use Qt 6.5.3 from /Users/ryder/Qt to match Stellarium's Qt version
+# We'll use -undefined dynamic_lookup so runtime uses Stellarium's bundled Qt
+if(EXISTS "/Users/ryder/Qt/6.5.3/macos/lib/cmake/Qt6")
+	set(CMAKE_PREFIX_PATH "/Users/ryder/Qt/6.5.3/macos" ${CMAKE_PREFIX_PATH})
+	message(STATUS "Using Qt 6.5.3 from /Users/ryder/Qt/6.5.3/macos (matches Stellarium)")
+elseif(EXISTS "/opt/homebrew/lib/cmake/Qt6")
+	set(CMAKE_PREFIX_PATH "/opt/homebrew" ${CMAKE_PREFIX_PATH})
+	message(STATUS "Using Homebrew Qt for headers and MOC (fallback)")
+else()
+	message(FATAL_ERROR "Qt 6.5.3 not found. Please install Qt 6.5.3 or set CMAKE_PREFIX_PATH.")
+endif()
+
 find_package(Qt6 REQUIRED COMPONENTS Core Widgets)
 
 # Try to find Stellarium
@@ -130,7 +142,9 @@ target_include_directories(MoonAvoidance PRIVATE
     ${STELLARIUM_INCLUDE_DIRS}
 )
 
-target_link_libraries(MoonAvoidance
+# For dynamic plugins, we link against Qt6::Core and Qt6::Widgets for compilation
+# The -undefined dynamic_lookup flag ensures runtime uses Stellarium's bundled Qt
+target_link_libraries(MoonAvoidance PRIVATE
     Qt6::Core
     Qt6::Widgets
 )
