@@ -9,16 +9,15 @@ set(STELROOT "" CACHE PATH "Path to Stellarium source root directory")
 set(STELLARIUM_BUILD_DIR "" CACHE PATH "Path to Stellarium build directory")
 
 # Find required packages
-# Use Qt 6.5.3 from /Users/ryder/Qt to match Stellarium's Qt version
-# We'll use -undefined dynamic_lookup so runtime uses Stellarium's bundled Qt
-if(EXISTS "/Users/ryder/Qt/6.5.3/macos/lib/cmake/Qt6")
-	set(CMAKE_PREFIX_PATH "/Users/ryder/Qt/6.5.3/macos" ${CMAKE_PREFIX_PATH})
-	message(STATUS "Using Qt 6.5.3 from /Users/ryder/Qt/6.5.3/macos (matches Stellarium)")
-elseif(EXISTS "/opt/homebrew/lib/cmake/Qt6")
-	set(CMAKE_PREFIX_PATH "/opt/homebrew" ${CMAKE_PREFIX_PATH})
-	message(STATUS "Using Homebrew Qt for headers and MOC (fallback)")
-else()
-	message(FATAL_ERROR "Qt 6.5.3 not found. Please install Qt 6.5.3 or set CMAKE_PREFIX_PATH.")
+# Hint: If Qt is not found, set CMAKE_PREFIX_PATH to your Qt installation
+# e.g. cmake -DCMAKE_PREFIX_PATH=~/Qt/6.5.3/macos ..
+
+# Check common macOS paths for Qt if not already set
+if(NOT DEFINED CMAKE_PREFIX_PATH)
+    if(EXISTS "/opt/homebrew/lib/cmake/Qt6")
+        set(CMAKE_PREFIX_PATH "/opt/homebrew" ${CMAKE_PREFIX_PATH})
+        message(STATUS "Using Homebrew Qt for headers and MOC (fallback)")
+    endif()
 endif()
 
 find_package(Qt6 REQUIRED COMPONENTS Core Widgets)
