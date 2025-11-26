@@ -8,19 +8,29 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(STELROOT "" CACHE PATH "Path to Stellarium source root directory")
 set(STELLARIUM_BUILD_DIR "" CACHE PATH "Path to Stellarium build directory")
 
-# Find required packages
-# Hint: If Qt is not found, set CMAKE_PREFIX_PATH to your Qt installation
-# e.g. cmake -DCMAKE_PREFIX_PATH=~/Qt/6.5.3/macos ..
-
-# Check common macOS paths for Qt if not already set
-if(NOT DEFINED CMAKE_PREFIX_PATH)
-    if(EXISTS "/opt/homebrew/lib/cmake/Qt6")
-        set(CMAKE_PREFIX_PATH "/opt/homebrew" ${CMAKE_PREFIX_PATH})
-        message(STATUS "Using Homebrew Qt for headers and MOC (fallback)")
+# Load required Qt version from config file
+file(STRINGS "qt_version.conf" CONFIG_CONTENTS REGEX "^QT_VERSION_REQUIRED=")
+foreach(line ${CONFIG_CONTENTS})
+    if(line MATCHES "QT_VERSION_REQUIRED=(.*)")
+        set(REQUIRED_QT_VERSION "${CMAKE_MATCH_1}")
     endif()
+endforeach()
+
+if(NOT REQUIRED_QT_VERSION)
+    message(FATAL_ERROR "Could not determine required Qt version from qt_version.conf")
 endif()
 
-find_package(Qt6 REQUIRED COMPONENTS Core Widgets)
+message(STATUS "Required Qt version: ${REQUIRED_QT_VERSION}")
+
+# Find required packages
+# User MUST provide CMAKE_PREFIX_PATH to the specific Qt installation
+# e.g. cmake -DCMAKE_PREFIX_PATH=~/Qt/6.5.3/macos ..
+
+if(NOT DEFINED CMAKE_PREFIX_PATH)
+    message(FATAL_ERROR "CMAKE_PREFIX_PATH is not defined. Please set it to your Qt installation path (e.g. -DCMAKE_PREFIX_PATH=/path/to/Qt/${REQUIRED_QT_VERSION}/platform)")
+endif()
+
+find_package(Qt6 ${REQUIRED_QT_VERSION} EXACT REQUIRED COMPONENTS Core Widgets)
 
 # Try to find Stellarium
 if(STELROOT)
