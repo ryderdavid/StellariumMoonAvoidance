@@ -9,7 +9,7 @@ set(STELROOT "" CACHE PATH "Path to Stellarium source root directory")
 set(STELLARIUM_BUILD_DIR "" CACHE PATH "Path to Stellarium build directory")
 
 # Load required Qt version from config file
-file(STRINGS "qt_version.conf" CONFIG_CONTENTS REGEX "^QT_VERSION_REQUIRED=")
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/qt_version.conf" CONFIG_CONTENTS REGEX "^QT_VERSION_REQUIRED=")
 foreach(line ${CONFIG_CONTENTS})
     if(line MATCHES "QT_VERSION_REQUIRED=(.*)")
         set(REQUIRED_QT_VERSION "${CMAKE_MATCH_1}")
