@@ -26,7 +26,7 @@ message(STATUS "Required Qt version: ${REQUIRED_QT_VERSION}")
 # User MUST provide CMAKE_PREFIX_PATH to the specific Qt installation
 # e.g. cmake -DCMAKE_PREFIX_PATH=~/Qt/6.5.3/macos ..
 
-if(NOT DEFINED CMAKE_PREFIX_PATH)
+if(NOT CMAKE_PREFIX_PATH)
     message(FATAL_ERROR "CMAKE_PREFIX_PATH is not defined. Please set it to your Qt installation path (e.g. -DCMAKE_PREFIX_PATH=/path/to/Qt/${REQUIRED_QT_VERSION}/platform)")
 endif()
 
