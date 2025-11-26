@@ -28,6 +28,15 @@ This plugin draws concentric circles around the moon representing "no-shoot-zone
 
 ### Build Instructions
 
+This plugin requires Qt 6.5.3 (or the version specified in `qt_version.conf`). You MUST provide the path to your Qt installation using `CMAKE_PREFIX_PATH`.
+
+1.  **Determine your Qt path**: This should point to the platform-specific directory inside your Qt installation.
+    *   macOS: `/path/to/Qt/6.5.3/macos`
+    *   Windows: `C:/Qt/6.5.3/msvc2019_64` (use forward slashes or escape backslashes)
+    *   Linux: `/path/to/Qt/6.5.3/gcc_64`
+
+2.  **Configure and Build**:
+
 #### Option 1: Build against Stellarium source tree
 
 If you have the Stellarium source code:
@@ -35,7 +44,9 @@ If you have the Stellarium source code:
 ```bash
 mkdir build
 cd build
-cmake .. -DSTELROOT=/path/to/stellarium/source
+cmake .. \
+    -DSTELROOT=/path/to/stellarium/source \
+    -DCMAKE_PREFIX_PATH=/path/to/Qt/6.5.3/macos
 make
 make install
 ```
@@ -47,8 +58,10 @@ If you have Stellarium installed or built elsewhere:
 ```bash
 mkdir build
 cd build
-cmake .. -DSTELLARIUM_SOURCE_DIR=/path/to/stellarium/src \
-         -DSTELLARIUM_BUILD_DIR=/path/to/stellarium/build
+cmake .. \
+    -DSTELLARIUM_SOURCE_DIR=/path/to/stellarium/src \
+    -DSTELLARIUM_BUILD_DIR=/path/to/stellarium/build \
+    -DCMAKE_PREFIX_PATH=/path/to/Qt/6.5.3/macos
 make
 make install
 ```
