@@ -9,6 +9,8 @@
 #include <QColorDialog>
 #include <QLabel>
 #include <QCheckBox>
+#include <QTabWidget>
+#include <QTextBrowser>
 #include "MoonAvoidanceConfig.hpp"
 
 class TitleBar;
@@ -49,8 +51,16 @@ private:
 	void updateFormFields();
 	void enableFormFields(bool enabled);
 	void updateCurrentSeparation(); // Calculate and display current separation
-	
-	// Left panel: Filter list
+	void createFiltersTab();
+	void createInfoTab();
+	void createAboutTab();
+	void createDiagramTab();
+
+	// Tab widget
+	QTabWidget* tabWidget;
+
+	// Filters tab widgets
+	QWidget* filtersTab;
 	QListWidget* filterListWidget;
 	
 	// Right panel: Form fields
@@ -64,7 +74,17 @@ private:
 	QLabel* colorLabel;
 	QLabel* moonAgeLabel; // Read-only display of moon age (days since new moon)
 	QLabel* currentSeparationLabel; // Read-only display of calculated current separation
-	
+
+	// Visibility checkbox
+	QCheckBox* enabledCheckBox;
+
+	// Other tabs
+	QWidget* infoTab;
+	QWidget* aboutTab;
+	QWidget* diagramTab;
+	QTextBrowser* infoTextBrowser;
+	QTextBrowser* aboutTextBrowser;
+
 	// Buttons
 	QPushButton* addButton;
 	QPushButton* removeButton;

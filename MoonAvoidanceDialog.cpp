@@ -14,11 +14,16 @@
 #include <QListWidget>
 #include <QListWidgetItem>
 #include <QLabel>
+#include <QTabWidget>
+#include <QTextBrowser>
+#include <QGroupBox>
 #include <QDebug>
 #include <cmath>
 
 MoonAvoidanceDialog::MoonAvoidanceDialog()
 	: StelDialog("MoonAvoidance")
+	, tabWidget(nullptr)
+	, filtersTab(nullptr)
 	, filterListWidget(nullptr)
 	, formLayout(nullptr)
 	, separationSpinBox(nullptr)
@@ -30,6 +35,12 @@ MoonAvoidanceDialog::MoonAvoidanceDialog()
 	, colorLabel(nullptr)
 	, moonAgeLabel(nullptr)
 	, currentSeparationLabel(nullptr)
+	, enabledCheckBox(nullptr)
+	, infoTab(nullptr)
+	, aboutTab(nullptr)
+	, diagramTab(nullptr)
+	, infoTextBrowser(nullptr)
+	, aboutTextBrowser(nullptr)
 	, addButton(nullptr)
 	, removeButton(nullptr)
 	, okButton(nullptr)
@@ -42,6 +53,17 @@ MoonAvoidanceDialog::MoonAvoidanceDialog()
 
 MoonAvoidanceDialog::~MoonAvoidanceDialog()
 {
+	// Disconnect from plugin to prevent dangling pointers
+	MoonAvoidance* plugin = qobject_cast<MoonAvoidance*>(StelApp::getInstance().getModuleMgr().getModule("MoonAvoidance"));
+	if (plugin)
+	{
+		// Disconnect everything where the plugin is the sender and this dialog (or its children) is the receiver
+		plugin->disconnect(this);
+		if (enabledCheckBox)
+		{
+			plugin->disconnect(enabledCheckBox);
+		}
+	}
 }
 
 void MoonAvoidanceDialog::createDialogContent()
@@ -51,156 +73,60 @@ void MoonAvoidanceDialog::createDialogContent()
 	// Create the dialog widget
 	dialog = new QWidget();
 	dialog->setMinimumSize(700, 500);
-	
+
 	QVBoxLayout* mainLayout = new QVBoxLayout(dialog);
 	mainLayout->setContentsMargins(0, 0, 0, 0);
 	mainLayout->setSpacing(0);
-	
+
 	// Add TitleBar
 	TitleBar* titleBar = new TitleBar(dialog);
 	titleBar->setTitle("Moon Avoidance");
 	mainLayout->addWidget(titleBar);
-	
+
 	// Connect title bar signals
 	connect(titleBar, &TitleBar::closeClicked, this, &StelDialog::close);
 	connect(titleBar, &TitleBar::movedTo, this, &StelDialog::handleMovedTo);
-	
-	// Content layout
-	QVBoxLayout* contentLayout = new QVBoxLayout();
-	contentLayout->setContentsMargins(10, 10, 10, 10);
-	contentLayout->setSpacing(10);
-	
-	// Create horizontal layout for list and form
-	QHBoxLayout* listFormLayout = new QHBoxLayout();
-	
-	// Left panel: Filter list
-	filterListWidget = new QListWidget(dialog);
-	if (!filterListWidget)
-	{
-		qWarning() << "MoonAvoidanceDialog: Failed to create QListWidget";
-		return;
-	}
-	filterListWidget->setMinimumWidth(150);
-	filterListWidget->setMaximumWidth(200);
-	listFormLayout->addWidget(filterListWidget);
-	
-	// Right panel: Form fields
-	QVBoxLayout* formContainerLayout = new QVBoxLayout();
-	formLayout = new QFormLayout();
-	
-	// Separation (in degrees)
-	separationSpinBox = new QDoubleSpinBox(dialog);
-	separationSpinBox->setRange(0.0, 180.0);
-	separationSpinBox->setDecimals(1);
-	separationSpinBox->setSuffix("°");
-	formLayout->addRow("Separation:", separationSpinBox);
-	
-	// Width (in days)
-	widthSpinBox = new QDoubleSpinBox(dialog);
-	widthSpinBox->setRange(0.1, 30.0);
-	widthSpinBox->setDecimals(1);
-	widthSpinBox->setSuffix(" days");
-	formLayout->addRow("Width:", widthSpinBox);
-	
-	// Relaxation
-	relaxationSpinBox = new QDoubleSpinBox(dialog);
-	relaxationSpinBox->setRange(0.0, 100.0);
-	relaxationSpinBox->setDecimals(1);
-	formLayout->addRow("Relaxation:", relaxationSpinBox);
-	
-	// Min Alt
-	minAltSpinBox = new QDoubleSpinBox(dialog);
-	minAltSpinBox->setRange(-90.0, 90.0);
-	minAltSpinBox->setDecimals(1);
-	minAltSpinBox->setSuffix("°");
-	formLayout->addRow("Min Altitude:", minAltSpinBox);
-	
-	// Max Alt
-	maxAltSpinBox = new QDoubleSpinBox(dialog);
-	maxAltSpinBox->setRange(-90.0, 90.0);
-	maxAltSpinBox->setDecimals(1);
-	maxAltSpinBox->setSuffix("°");
-	formLayout->addRow("Max Altitude:", maxAltSpinBox);
-	
-	// Moon Age (calculated, read-only) - days since new moon
-	moonAgeLabel = new QLabel(dialog);
-	moonAgeLabel->setText("--");
-	moonAgeLabel->setStyleSheet("QLabel { background-color: #2a2a2a; padding: 4px; border: 1px solid #555555; border-radius: 3px; }");
-	moonAgeLabel->setMinimumHeight(25);
-	formLayout->addRow("Moon Age:", moonAgeLabel);
-	
-	// Current Separation (calculated, read-only)
-	currentSeparationLabel = new QLabel(dialog);
-	currentSeparationLabel->setText("--");
-	currentSeparationLabel->setStyleSheet("QLabel { background-color: #2a2a2a; padding: 4px; border: 1px solid #555555; border-radius: 3px; }");
-	currentSeparationLabel->setMinimumHeight(25);
-	formLayout->addRow("Current Separation:", currentSeparationLabel);
-	
-	// Color
-	colorButton = new QPushButton("Choose Color", dialog);
-	colorLabel = new QLabel(dialog);
-	colorLabel->setMinimumSize(50, 30);
-	colorLabel->setFrameStyle(QFrame::Box | QFrame::Raised);
-	QHBoxLayout* colorLayout = new QHBoxLayout();
-	colorLayout->addWidget(colorButton);
-	colorLayout->addWidget(colorLabel);
-	colorLayout->addStretch();
-	formLayout->addRow("Color:", colorLayout);
-	
-	formContainerLayout->addLayout(formLayout);
-	formContainerLayout->addStretch();
-	
-	listFormLayout->addLayout(formContainerLayout, 1);
-	contentLayout->addLayout(listFormLayout);
-	
-	// Button layout
+
+	// Create tab widget (no content layout wrapper)
+	tabWidget = new QTabWidget(dialog);
+	tabWidget->setDocumentMode(false);
+
+	// Create tabs
+	createFiltersTab();
+	createInfoTab();
+	createAboutTab();
+	createDiagramTab();
+
+	// Add tabs to tab widget
+	if (filtersTab)
+		tabWidget->addTab(filtersTab, "Filters");
+	if (infoTab)
+		tabWidget->addTab(infoTab, "Info");
+	if (aboutTab)
+		tabWidget->addTab(aboutTab, "About");
+	if (diagramTab)
+		tabWidget->addTab(diagramTab, "Diagram");
+
+	mainLayout->addWidget(tabWidget);
+
+	// Add OK/Cancel buttons at the bottom (inside main layout)
 	QHBoxLayout* buttonLayout = new QHBoxLayout();
-	
-	addButton = new QPushButton("Add Filter", dialog);
-	removeButton = new QPushButton("Remove Filter", dialog);
 	okButton = new QPushButton("OK", dialog);
 	cancelButton = new QPushButton("Cancel", dialog);
-	
-	if (!addButton || !removeButton || !okButton || !cancelButton)
-	{
-		qWarning() << "MoonAvoidanceDialog: Failed to create buttons";
-		return;
-	}
-	
-	// Ensure buttons are readable - set proper text colors and styles
-	QString buttonStyle = "QPushButton { "
-		"background-color: #3a3a3a; "
-		"color: white; "
-		"border: 1px solid #555555; "
-		"border-radius: 4px; "
-		"padding: 6px 12px; "
-		"min-width: 80px; "
-		"} "
-		"QPushButton:hover { "
-		"background-color: #4a4a4a; "
-		"} "
-		"QPushButton:pressed { "
-		"background-color: #2a2a2a; "
-		"}";
-	
-	addButton->setStyleSheet(buttonStyle);
-	removeButton->setStyleSheet(buttonStyle);
-	okButton->setStyleSheet(buttonStyle);
-	cancelButton->setStyleSheet(buttonStyle);
-	colorButton->setStyleSheet(buttonStyle);
-	
-	buttonLayout->addWidget(addButton);
-	buttonLayout->addWidget(removeButton);
+
 	buttonLayout->addStretch();
 	buttonLayout->addWidget(okButton);
 	buttonLayout->addWidget(cancelButton);
-	
-	contentLayout->addLayout(buttonLayout);
-	mainLayout->addLayout(contentLayout);
-	
-	// Connect signals
-	connect(addButton, &QPushButton::clicked, this, &MoonAvoidanceDialog::addFilter);
-	connect(removeButton, &QPushButton::clicked, this, &MoonAvoidanceDialog::removeFilter);
+
+	// Create a widget to hold the button layout with some padding
+	QWidget* buttonWidget = new QWidget(dialog);
+	QVBoxLayout* buttonWidgetLayout = new QVBoxLayout(buttonWidget);
+	buttonWidgetLayout->setContentsMargins(10, 5, 10, 5);
+	buttonWidgetLayout->addLayout(buttonLayout);
+
+	mainLayout->addWidget(buttonWidget);
+
+	// Connect OK/Cancel signals
 	connect(okButton, &QPushButton::clicked, this, [this]() {
 		if (validateInput())
 		{
@@ -212,12 +138,167 @@ void MoonAvoidanceDialog::createDialogContent()
 		accepted = false;
 		close();
 	});
-	
+
+	// Connect language change
+	connect(&StelApp::getInstance(), SIGNAL(languageChanged()), this, SLOT(retranslate()));
+
+	qDebug() << "MoonAvoidanceDialog: createDialogContent completed";
+}
+
+void MoonAvoidanceDialog::retranslate()
+{
+	// Retranslate dialog content if needed
+	// For now, we'll keep the English text
+}
+
+void MoonAvoidanceDialog::createFiltersTab()
+{
+	filtersTab = new QWidget();
+	QVBoxLayout* filtersLayout = new QVBoxLayout(filtersTab);
+
+	// Create a flat QGroupBox to hold the filter configuration
+	QGroupBox* filterGroupBox = new QGroupBox("Filter Configuration", filtersTab);
+	filterGroupBox->setFlat(true);
+	QVBoxLayout* groupLayout = new QVBoxLayout(filterGroupBox);
+
+	// Add visibility checkbox at the top
+	enabledCheckBox = new QCheckBox("Show Moon Avoidance Circles", filterGroupBox);
+	if (enabledCheckBox)
+	{
+		groupLayout->addWidget(enabledCheckBox);
+
+		// Connect visibility checkbox to MoonAvoidance plugin
+		MoonAvoidance* plugin = qobject_cast<MoonAvoidance*>(StelApp::getInstance().getModuleMgr().getModule("MoonAvoidance"));
+		if (plugin)
+		{
+			// Set initial state from plugin
+			enabledCheckBox->setChecked(plugin->isEnabled());
+
+			// Connect checkbox to plugin
+			connect(enabledCheckBox, &QCheckBox::toggled, plugin, &MoonAvoidance::setEnabled);
+
+			// Connect plugin to checkbox (for updates from other sources)
+			connect(plugin, &MoonAvoidance::enabledChanged, enabledCheckBox, &QCheckBox::setChecked);
+
+			qDebug() << "MoonAvoidanceDialog: Visibility checkbox connected to plugin";
+		}
+		else
+		{
+			qWarning() << "MoonAvoidanceDialog: Failed to connect visibility checkbox - plugin is null";
+		}
+	}
+
+	// Create horizontal layout for list and form
+	QHBoxLayout* listFormLayout = new QHBoxLayout();
+
+	// Left panel: Filter list
+	filterListWidget = new QListWidget(filterGroupBox);
+	if (!filterListWidget)
+	{
+		qWarning() << "MoonAvoidanceDialog: Failed to create QListWidget";
+		return;
+	}
+	filterListWidget->setMinimumWidth(150);
+	filterListWidget->setMaximumWidth(200);
+	listFormLayout->addWidget(filterListWidget);
+
+	// Right panel: Form fields
+	QVBoxLayout* formContainerLayout = new QVBoxLayout();
+	formLayout = new QFormLayout();
+
+	// Separation (in degrees)
+	separationSpinBox = new QDoubleSpinBox(filterGroupBox);
+	separationSpinBox->setRange(0.0, 180.0);
+	separationSpinBox->setDecimals(1);
+	separationSpinBox->setSuffix("°");
+	formLayout->addRow("Separation:", separationSpinBox);
+
+	// Width (in days)
+	widthSpinBox = new QDoubleSpinBox(filterGroupBox);
+	widthSpinBox->setRange(0.1, 30.0);
+	widthSpinBox->setDecimals(1);
+	widthSpinBox->setSuffix(" days");
+	formLayout->addRow("Width:", widthSpinBox);
+
+	// Relaxation
+	relaxationSpinBox = new QDoubleSpinBox(filterGroupBox);
+	relaxationSpinBox->setRange(0.0, 100.0);
+	relaxationSpinBox->setDecimals(1);
+	formLayout->addRow("Relaxation:", relaxationSpinBox);
+
+	// Min Alt
+	minAltSpinBox = new QDoubleSpinBox(filterGroupBox);
+	minAltSpinBox->setRange(-90.0, 90.0);
+	minAltSpinBox->setDecimals(1);
+	minAltSpinBox->setSuffix("°");
+	formLayout->addRow("Min Altitude:", minAltSpinBox);
+
+	// Max Alt
+	maxAltSpinBox = new QDoubleSpinBox(filterGroupBox);
+	maxAltSpinBox->setRange(-90.0, 90.0);
+	maxAltSpinBox->setDecimals(1);
+	maxAltSpinBox->setSuffix("°");
+	formLayout->addRow("Max Altitude:", maxAltSpinBox);
+
+	// Moon Age (calculated, read-only) - days since new moon
+	moonAgeLabel = new QLabel(filterGroupBox);
+	moonAgeLabel->setText("--");
+	moonAgeLabel->setMinimumHeight(25);
+	formLayout->addRow("Moon Age:", moonAgeLabel);
+
+	// Current Separation (calculated, read-only)
+	currentSeparationLabel = new QLabel(filterGroupBox);
+	currentSeparationLabel->setText("--");
+	currentSeparationLabel->setMinimumHeight(25);
+	formLayout->addRow("Current Separation:", currentSeparationLabel);
+
+	// Color
+	colorButton = new QPushButton("Choose Color", filterGroupBox);
+	colorLabel = new QLabel(filterGroupBox);
+	colorLabel->setMinimumSize(50, 30);
+	colorLabel->setFrameStyle(QFrame::Box | QFrame::Raised);
+	QHBoxLayout* colorLayout = new QHBoxLayout();
+	colorLayout->addWidget(colorButton);
+	colorLayout->addWidget(colorLabel);
+	colorLayout->addStretch();
+	formLayout->addRow("Color:", colorLayout);
+
+	formContainerLayout->addLayout(formLayout);
+	formContainerLayout->addStretch();
+
+	listFormLayout->addLayout(formContainerLayout, 1);
+	groupLayout->addLayout(listFormLayout);
+
+	// Button layout for Add/Remove
+	QHBoxLayout* filterButtonLayout = new QHBoxLayout();
+
+	addButton = new QPushButton("Add Filter", filterGroupBox);
+	removeButton = new QPushButton("Remove Filter", filterGroupBox);
+
+	if (!addButton || !removeButton)
+	{
+		qWarning() << "MoonAvoidanceDialog: Failed to create filter buttons";
+		return;
+	}
+
+	filterButtonLayout->addWidget(addButton);
+	filterButtonLayout->addWidget(removeButton);
+	filterButtonLayout->addStretch();
+
+	groupLayout->addLayout(filterButtonLayout);
+
+	// Add the group box to the main filters layout
+	filtersLayout->addWidget(filterGroupBox);
+
+	// Connect signals for filter tab
+	connect(addButton, &QPushButton::clicked, this, &MoonAvoidanceDialog::addFilter);
+	connect(removeButton, &QPushButton::clicked, this, &MoonAvoidanceDialog::removeFilter);
+
 	if (filterListWidget)
 	{
 		connect(filterListWidget, &QListWidget::currentTextChanged, this, &MoonAvoidanceDialog::onFilterSelectionChanged);
 	}
-	
+
 	if (separationSpinBox)
 	{
 		connect(separationSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MoonAvoidanceDialog::updateSeparation);
@@ -242,27 +323,87 @@ void MoonAvoidanceDialog::createDialogContent()
 	{
 		connect(colorButton, &QPushButton::clicked, this, &MoonAvoidanceDialog::updateColor);
 	}
-	
-	// Connect language change
-	connect(&StelApp::getInstance(), SIGNAL(languageChanged()), this, SLOT(retranslate()));
-	
+
 	// Initially disable form fields until a filter is selected
 	enableFormFields(false);
-	
+
 	// If we have pending filters (set before dialog was created), apply them now
 	if (!pendingFilters.isEmpty())
 	{
 		setFilters(pendingFilters);
 		pendingFilters.clear();
 	}
-	
-	qDebug() << "MoonAvoidanceDialog: createDialogContent completed";
 }
 
-void MoonAvoidanceDialog::retranslate()
+void MoonAvoidanceDialog::createInfoTab()
 {
-	// Retranslate dialog content if needed
-	// For now, we'll keep the English text
+	infoTab = new QWidget();
+	QVBoxLayout* infoLayout = new QVBoxLayout(infoTab);
+	infoLayout->setContentsMargins(10, 10, 10, 10);
+
+	infoTextBrowser = new QTextBrowser(infoTab);
+	infoTextBrowser->setOpenExternalLinks(true);
+
+	QString infoText = "<h2>Moon Avoidance Plugin</h2>"
+		"<p>This plugin visualizes moon avoidance zones for astrophotography planning.</p>"
+		"<h3>How it works:</h3>"
+		"<ul>"
+		"<li><b>Separation</b>: Base angular distance from the moon (in degrees)</li>"
+		"<li><b>Width</b>: Controls how quickly avoidance decreases as moon phase changes (in days)</li>"
+		"<li><b>Relaxation</b>: How much to relax avoidance when moon is low on the horizon</li>"
+		"<li><b>Min/Max Altitude</b>: Altitude range where relaxation applies</li>"
+		"</ul>"
+		"<h3>Moon Phase Calculation:</h3>"
+		"<p>The plugin uses a Lorentzian formula to calculate separation based on moon age. "
+		"Avoidance is highest at full moon and decreases as the moon approaches new moon.</p>"
+		"<h3>Filter Colors:</h3>"
+		"<p>Different filters can be configured with different colors for easy visualization on the sky.</p>";
+
+	infoTextBrowser->setHtml(infoText);
+	infoLayout->addWidget(infoTextBrowser);
+}
+
+void MoonAvoidanceDialog::createAboutTab()
+{
+	aboutTab = new QWidget();
+	QVBoxLayout* aboutLayout = new QVBoxLayout(aboutTab);
+	aboutLayout->setContentsMargins(10, 10, 10, 10);
+
+	aboutTextBrowser = new QTextBrowser(aboutTab);
+	aboutTextBrowser->setOpenExternalLinks(true);
+
+	QString aboutText = "<h2>About Moon Avoidance</h2>"
+		"<p><b>Version:</b> 1.0.0</p>"
+		"<p><b>Author:</b> Stellarium Community</p>"
+		"<p><b>License:</b> GPL</p>"
+		"<h3>Description:</h3>"
+		"<p>This plugin implements moon avoidance calculations for astrophotography planning, "
+		"compatible with NINA (Nighttime Imaging 'N' Astronomy) target scheduler logic.</p>"
+		"<h3>Features:</h3>"
+		"<ul>"
+		"<li>Visualize moon avoidance zones on the sky</li>"
+		"<li>Configure multiple filters with different avoidance parameters</li>"
+		"<li>Altitude-based relaxation for low moon positions</li>"
+		"<li>Real-time calculation based on moon phase and position</li>"
+		"<li>Color-coded circles for easy identification</li>"
+		"</ul>"
+		"<h3>More Information:</h3>"
+		"<p>For documentation and source code, visit the project repository.</p>";
+
+	aboutTextBrowser->setHtml(aboutText);
+	aboutLayout->addWidget(aboutTextBrowser);
+}
+
+void MoonAvoidanceDialog::createDiagramTab()
+{
+	diagramTab = new QWidget();
+	QVBoxLayout* diagramLayout = new QVBoxLayout(diagramTab);
+	diagramLayout->setContentsMargins(10, 10, 10, 10);
+
+	QLabel* placeholderLabel = new QLabel("Diagram view coming soon...", diagramTab);
+	placeholderLabel->setAlignment(Qt::AlignCenter);
+
+	diagramLayout->addWidget(placeholderLabel);
 }
 
 void MoonAvoidanceDialog::setFilters(const QList<FilterConfig>& filters)

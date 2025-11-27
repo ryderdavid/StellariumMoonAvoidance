@@ -15,7 +15,6 @@
 #include <QMetaObject>
 #include <QThread>
 #include <QDebug>
-#include <QPainter>
 #include <QtGlobal> // For qMax, qMin, qBound
 #include <algorithm> // For std::sort
 #include <cmath>
@@ -33,13 +32,29 @@ MoonAvoidance::MoonAvoidance()
 
 MoonAvoidance::~MoonAvoidance()
 {
+	// Disconnect dialog from plugin to prevent accessing plugin during destruction
+	if (configDialog)
+	{
+		configDialog->disconnect(this);
+		
+		// Manually delete the dialog if it hasn't been parented to something else
+		// Note: If the dialog was added to the StelGui, it might be deleted by Qt's object tree
+		// But since we created it with 'new MoonAvoidanceDialog()', it likely has no parent initially
+		// or was parented to something else later.
+		// Check if it's still valid and delete if necessary
+		if (configDialog->parent() == nullptr) {
+			delete configDialog;
+		} else {
+			// If it has a parent, let the parent delete it, but ensure it's hidden/closed first
+			configDialog->close();
+		}
+		configDialog = nullptr;
+	}
+
 	if (config)
 	{
 		delete config;
-	}
-	if (configDialog)
-	{
-		delete configDialog;
+		config = nullptr;
 	}
 }
 
@@ -131,7 +146,7 @@ void MoonAvoidance::init()
 			}
 		});
 	}
-	
+
 	qDebug() << "MoonAvoidance plugin initialized";
 }
 
@@ -1294,5 +1309,6 @@ void MoonAvoidance::setEnabled(bool b)
 		enabled = b;
 		flagShow = b; // Use assignment operator to transition the fader
 		saveConfiguration();
+		emit enabledChanged(b);
 	}
 }

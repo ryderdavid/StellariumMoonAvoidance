@@ -13,6 +13,7 @@ class MoonAvoidanceDialog;
 class MoonAvoidance : public StelModule
 {
 	Q_OBJECT
+	Q_PROPERTY(bool enabled READ isEnabled WRITE setEnabled NOTIFY enabledChanged)
 
 public:
 	MoonAvoidance();
@@ -41,6 +42,9 @@ public:
 	double getCurrentMoonAgeDays() const { return lastMoonAgeDays; } // Days since new moon
 	double getCurrentMoonAgeFromFullDays() const { return lastMoonAgeFromFullDays; } // Days from full moon
 	double getCurrentMoonAltitude() const { return lastMoonAltitude; }
+
+signals:
+	void enabledChanged(bool enabled);
 
 private:
 	// Moon avoidance calculations

@@ -1,0 +1,44 @@
+# Project Context
+This project is a **Stellarium Dynamic Plugin** named **Moon Avoidance**.
+It visualizes "safe shooting zones" for astrophotography filters (LRGB, SHO) by drawing concentric circles around the moon.
+The logic mimics the **N.I.N.A. Target Scheduler** Moon Avoidance Lorentzian algorithm.
+
+# Tech Stack
+- **Language**: C++17
+- **Framework**: Qt 6.5+ (Core, Widgets, Gui)
+- **Build System**: CMake (linking against Stellarium headers, not static libs)
+- **Platform**: macOS (primary), cross-platform compatible
+
+# Critical Rules & Guidelines
+
+## 1. Qt & C++ Safety (High Priority)
+*   **Null Safety**: ALWAYS initialize pointers to `nullptr`. ALWAYS check for `nullptr` before accessing Stellarium core modules (e.g., `StelApp::getInstance()`, `GETSTELMODULE`).
+    *   *Strict Rule*: In `draw()` and `update()` loops, robust null checking is mandatory to prevent crashes during module loading/unloading.
+*   **Signal Blocking**: When programmatically updating UI widgets (e.g., `QSpinBox`, `QComboBox`) in response to model changes, ALWAYS wrap calls in `blockSignals(true)` ... `blockSignals(false)` to prevent infinite recursion or double-firing.
+*   **Memory Management**: Prefer parenting Qt objects to the Dialog or Main Window to leverage Qt's object tree memory management. Use `std::unique_ptr` or `QScopedPointer` for non-QObject resources.
+*   **Logging**: Use `qDebug()` for development logs. Use `qWarning()` for recoverable errors.
+
+## 2. Math & Domain Logic
+*   **Moon Age Definitions**:
+    *   `MoonAge` (Astronomical): Days since *New Moon* (0 = New, ~14.8 = Full).
+    *   `MoonAgeFromFull` (Lorentzian): Days from *Full Moon* (0 = Full, highest avoidance).
+    *   *Rule*: Be explicit about which "age" is being used in calculations. The Lorentzian formula requires `MoonAgeFromFull`.
+*   **Lorentzian Formula**:
+    *   Formula: `Separation = Distance / (1 + (AgeFromFull / Width)^2)`
+    *   Logic: Avoidance is maximized at Full Moon (Age=0) and decays as Age increases.
+*   **N.I.N.A. Compatibility**: Refer to `COMPARISON_WITH_NINA.md` when resolving logic ambiguity. NINA handles "Relaxation" and "Min/Max Altitude" specifically—follow our implementation of checking `minAlt <= currentAlt <= maxAlt`.
+
+## 3. Stellarium Plugin Conventions
+*   **Class Naming**: `PascalCase` (e.g., `MoonAvoidance`, `MoonAvoidanceDialog`).
+*   **Method Naming**: `camelCase` (e.g., `drawCircle`, `updateSeparation`).
+*   **Member Variables**: No specific prefix required, but be consistent.
+*   **Drawing**: Use `StelPainter` for all on-screen rendering. Use `StelCore::FrameJ2000` for celestial positioning.
+
+## 4. Build & Environment (macOS)
+*   **Linker Flags**: Dynamic plugins on macOS MUST use `-undefined dynamic_lookup` to resolve symbols from the main Stellarium executable at runtime.
+*   **Qt Paths**: CMake looks for Qt in specific paths (e.g., `~/Qt/6.5.3/...`). If build fails, check `CMAKE_PREFIX_PATH`.
+
+## 5. Workflow
+*   **Plan Mode**: Before implementing complex features, update `PLAN.md` or propose a plan in chat.
+*   **Verification**: After substantive edits, consider `read_lints` (if available) or ask to run the build.
+
