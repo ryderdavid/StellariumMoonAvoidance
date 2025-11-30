@@ -54,13 +54,29 @@ jobs:
           target: desktop
           arch: win64_msvc2022_64
           cache: true
+          set-env: true
+
+      - name: Checkout Stellarium Source
+        uses: actions/checkout@v4
+        with:
+          repository: stellarium/stellarium
+          ref: v${{ env.STELLARIUM_VERSION }}
+          path: stellarium-source
+          fetch-depth: 1
+
+      - name: Debug Environment
+        run: |
+          echo "Qt6_DIR: $env:Qt6_DIR"
+          dir env:
+        shell: powershell
 
       - name: Configure CMake (Windows)
         run: |
           cmake -S . -B %BUILD_DIR% ^
             -G "Ninja" ^
             -DCMAKE_BUILD_TYPE=%CMAKE_BUILD_TYPE% ^
-            -DCMAKE_PREFIX_PATH="%Qt6_DIR%"
+            -DCMAKE_PREFIX_PATH="%Qt6_DIR%" ^
+            -DSTELROOT="stellarium-source"
         shell: cmd
 
       - name: Build plugin (Windows Release)
