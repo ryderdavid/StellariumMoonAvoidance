@@ -99,3 +99,22 @@ jobs:
           name: windows-plugin-${{ env.STELLARIUM_TARGET }}-${{ env.CMAKE_BUILD_TYPE }}
           path: package/
           if-no-files-found: warn
+
+      - name: Create Zip Archive
+        if: github.ref == 'refs/heads/main'
+        run: |
+          Compress-Archive -Path package\* -DestinationPath MoonAvoidance-Windows.zip
+        shell: powershell
+
+      - name: Update Nightly Release
+        if: github.ref == 'refs/heads/main'
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: "MoonAvoidance-Windows.zip"
+          tag: "nightly"
+          name: "Nightly Build"
+          body: "Latest development build from main branch."
+          allowUpdates: true
+          removeArtifacts: true
+          replacesArtifacts: true
+          token: ${{ secrets.GITHUB_TOKEN }}
