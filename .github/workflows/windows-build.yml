@@ -70,6 +70,11 @@ jobs:
           dir env:
         shell: powershell
 
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
       - name: Configure CMake (Windows)
         run: |
           cmake -S . -B %BUILD_DIR% ^
