@@ -39,60 +39,7 @@ jobs:
         env:
           REQUESTED_TARGET: ${{ github.event.inputs.stellarium_target }}
         run: |
-          compat_path="ci/stellarium-compat.yml"
-          if [ ! -f "$compat_path" ]; then
-            echo "Compatibility file '$compat_path' not found." >&2
-            exit 1
-          fi
-
-          python - << 'PYCODE'
-          import os, sys, yaml
-
-          compat_path = "ci/stellarium-compat.yml"
-
-          try:
-              with open(compat_path, "r", encoding="utf-8") as f:
-                  config = yaml.safe_load(f)
-          except FileNotFoundError:
-              print(f"Compatibility file '{compat_path}' not found.", file=sys.stderr)
-              sys.exit(1)
-
-          requested = os.getenv("REQUESTED_TARGET", "").strip()
-
-          target_key = requested or config.get("default")
-          if not target_key:
-              print("No default target defined in compatibility file and no target requested.", file=sys.stderr)
-              sys.exit(1)
-
-          targets = config.get("targets", {}) or {}
-
-          if target_key not in targets:
-              print(f"Requested Stellarium target '{target_key}' not found in {compat_path}.", file=sys.stderr)
-              print("Available targets: " + ", ".join(sorted(targets.keys())), file=sys.stderr)
-              sys.exit(1)
-
-          target = targets[target_key]
-
-          qt = target.get("qt", {}) or {}
-          msvc = target.get("msvc", {}) or {}
-
-          def write_env(key, value):
-              with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
-                  env.write(f"{key}={value}\n")
-
-          write_env("STELLARIUM_TARGET", target_key)
-          write_env("STELLARIUM_VERSION", target.get("stellarium_version", ""))
-          write_env("QT_MAJOR", qt.get("major", ""))
-          write_env("QT_VERSION", qt.get("version", ""))
-          write_env("MSVC_YEAR", msvc.get("year", ""))
-          write_env("MSVC_TOOLSET", msvc.get("toolset", ""))
-
-          print(
-              f"Using Stellarium target: {target_key} "
-              f"(Stellarium {target.get('stellarium_version')}, "
-              f"Qt {qt.get('version')}, MSVC {msvc.get('year')})"
-          )
-PYCODE
+          python ci/resolve_stellarium_compat.py
 
       - name: Install Ninja
         run: |
