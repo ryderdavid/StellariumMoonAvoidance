@@ -85,10 +85,17 @@ jobs:
           cmake --build %BUILD_DIR% --config %CMAKE_BUILD_TYPE%
         shell: cmd
 
+      - name: Prepare Package
+        run: |
+          mkdir package
+          copy %BUILD_DIR%\MoonAvoidance.dll package\
+          copy plugin.ini package\
+          copy install.bat package\
+        shell: cmd
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: windows-plugin-${{ env.STELLARIUM_TARGET }}-${{ env.CMAKE_BUILD_TYPE }}
-          path: |
-            ${{ env.BUILD_DIR }}/
+          path: package/
           if-no-files-found: warn
