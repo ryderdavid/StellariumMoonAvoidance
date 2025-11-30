@@ -64,11 +64,7 @@ jobs:
           path: stellarium-source
           fetch-depth: 1
 
-      - name: Debug Environment
-        run: |
-          echo "Qt6_DIR: $env:Qt6_DIR"
-          dir env:
-        shell: powershell
+
 
       - name: Setup MSVC
         uses: ilammy/msvc-dev-cmd@v1
