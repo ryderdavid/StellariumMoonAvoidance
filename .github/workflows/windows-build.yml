@@ -28,44 +28,71 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Resolve Stellarium/Qt/MSVC target from compat file
-        shell: pwsh
+      - name: Install PyYAML
+        shell: bash
         run: |
-          $compatPath = "ci/stellarium-compat.yml"
-          if (-not (Test-Path $compatPath)) {
-            Write-Error "Compatibility file '$compatPath' not found."
+          python -m pip install --upgrade pip
+          python -m pip install pyyaml
+
+      - name: Resolve Stellarium/Qt/MSVC target from compat file
+        shell: bash
+        env:
+          REQUESTED_TARGET: ${{ github.event.inputs.stellarium_target }}
+        run: |
+          compat_path="ci/stellarium-compat.yml"
+          if [ ! -f "$compat_path" ]; then
+            echo "Compatibility file '$compat_path' not found." >&2
             exit 1
-          }
+          fi
 
-          $yaml = Get-Content $compatPath -Raw
+          python - << 'PYCODE'
+import os, sys, yaml
 
-          # PowerShell 7+ provides ConvertFrom-Yaml; GitHub Actions windows-latest
-          # images include pwsh with this cmdlet available.
-          $config = ConvertFrom-Yaml $yaml
+compat_path = "ci/stellarium-compat.yml"
 
-          $requestedTarget = "${{ github.event.inputs.stellarium_target }}".Trim()
-          if ([string]::IsNullOrEmpty($requestedTarget)) {
-            $targetKey = $config.default
-          } else {
-            $targetKey = $requestedTarget
-          }
+try:
+    with open(compat_path, "r", encoding="utf-8") as f:
+        config = yaml.safe_load(f)
+except FileNotFoundError:
+    print(f"Compatibility file '{compat_path}' not found.", file=sys.stderr)
+    sys.exit(1)
 
-          if (-not $config.targets.ContainsKey($targetKey)) {
-            Write-Error "Requested Stellarium target '$targetKey' not found in ci/stellarium-compat.yml."
-            Write-Error "Available targets: $($config.targets.PSObject.Properties.Name -join ', ')"
-            exit 1
-          }
+requested = os.getenv("REQUESTED_TARGET", "").strip()
 
-          $target = $config.targets.$targetKey
+target_key = requested or config.get("default")
+if not target_key:
+    print("No default target defined in compatibility file and no target requested.", file=sys.stderr)
+    sys.exit(1)
 
-          "STELLARIUM_TARGET=$targetKey" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "STELLARIUM_VERSION=$($target.stellarium_version)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "QT_MAJOR=$($target.qt.major)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "QT_VERSION=$($target.qt.version)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "MSVC_YEAR=$($target.msvc.year)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "MSVC_TOOLSET=$($target.msvc.toolset)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+targets = config.get("targets", {}) or {}
 
-          Write-Host "Using Stellarium target: $targetKey (Stellarium $($target.stellarium_version), Qt $($target.qt.version), MSVC $($target.msvc.year))"
+if target_key not in targets:
+    print(f"Requested Stellarium target '{target_key}' not found in {compat_path}.", file=sys.stderr)
+    print("Available targets: " + ", ".join(sorted(targets.keys())), file=sys.stderr)
+    sys.exit(1)
+
+target = targets[target_key]
+
+qt = target.get("qt", {}) or {}
+msvc = target.get("msvc", {}) or {}
+
+def write_env(key, value):
+    with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
+        env.write(f"{key}={value}\n")
+
+write_env("STELLARIUM_TARGET", target_key)
+write_env("STELLARIUM_VERSION", target.get("stellarium_version", ""))
+write_env("QT_MAJOR", qt.get("major", ""))
+write_env("QT_VERSION", qt.get("version", ""))
+write_env("MSVC_YEAR", msvc.get("year", ""))
+write_env("MSVC_TOOLSET", msvc.get("toolset", ""))
+
+print(
+    f"Using Stellarium target: {target_key} "
+    f"(Stellarium {target.get('stellarium_version')}, "
+    f"Qt {qt.get('version')}, MSVC {msvc.get('year')})"
+)
+PYCODE
 
       - name: Install Ninja
         run: |
