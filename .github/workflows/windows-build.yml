@@ -75,7 +75,7 @@ jobs:
           cmake -S . -B %BUILD_DIR% ^
             -G "Ninja" ^
             -DCMAKE_BUILD_TYPE=%CMAKE_BUILD_TYPE% ^
-            -DCMAKE_PREFIX_PATH="%Qt6_DIR%" ^
+            -DCMAKE_PREFIX_PATH="%QT_ROOT_DIR%" ^
             -DSTELROOT="stellarium-source"
         shell: cmd
 
