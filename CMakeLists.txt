@@ -167,6 +167,10 @@ if(APPLE)
 	target_link_options(MoonAvoidance PRIVATE
 		-undefined dynamic_lookup
 	)
+elseif(MSVC)
+	target_link_options(MoonAvoidance PRIVATE
+		/FORCE:UNRESOLVED
+	)
 endif()
 
 # Install plugin
