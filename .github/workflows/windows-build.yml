@@ -1,0 +1,103 @@
+name: Windows Build (Stellarium Plugin)
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+    inputs:
+      stellarium_target:
+        description: "Key from ci/stellarium-compat.yml targets (e.g. 25.3-qt6-win64)"
+        required: false
+        default: ""
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    env:
+      CMAKE_BUILD_TYPE: Release
+      BUILD_DIR: build-windows
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Resolve Stellarium/Qt/MSVC target from compat file
+        shell: pwsh
+        run: |
+          $compatPath = "ci/stellarium-compat.yml"
+          if (-not (Test-Path $compatPath)) {
+            Write-Error "Compatibility file '$compatPath' not found."
+            exit 1
+          }
+
+          $yaml = Get-Content $compatPath -Raw
+
+          # PowerShell 7+ provides ConvertFrom-Yaml; GitHub Actions windows-latest
+          # images include pwsh with this cmdlet available.
+          $config = ConvertFrom-Yaml $yaml
+
+          $requestedTarget = "${{ github.event.inputs.stellarium_target }}".Trim()
+          if ([string]::IsNullOrEmpty($requestedTarget)) {
+            $targetKey = $config.default
+          } else {
+            $targetKey = $requestedTarget
+          }
+
+          if (-not $config.targets.ContainsKey($targetKey)) {
+            Write-Error "Requested Stellarium target '$targetKey' not found in ci/stellarium-compat.yml."
+            Write-Error "Available targets: $($config.targets.PSObject.Properties.Name -join ', ')"
+            exit 1
+          }
+
+          $target = $config.targets.$targetKey
+
+          "STELLARIUM_TARGET=$targetKey" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "STELLARIUM_VERSION=$($target.stellarium_version)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "QT_MAJOR=$($target.qt.major)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "QT_VERSION=$($target.qt.version)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "MSVC_YEAR=$($target.msvc.year)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "MSVC_TOOLSET=$($target.msvc.toolset)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+          Write-Host "Using Stellarium target: $targetKey (Stellarium $($target.stellarium_version), Qt $($target.qt.version), MSVC $($target.msvc.year))"
+
+      - name: Install Ninja
+        run: |
+          choco install ninja --yes
+        shell: powershell
+
+      - name: Install Qt for Windows (desktop)
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: windows
+          target: desktop
+          arch: win64_msvc2022_64
+          cache: true
+
+      - name: Configure CMake (Windows)
+        run: |
+          cmake -S . -B $env:BUILD_DIR ^
+            -G "Ninja" ^
+            -DCMAKE_BUILD_TYPE=$env:CMAKE_BUILD_TYPE ^
+            -DCMAKE_PREFIX_PATH="$env:Qt6_DIR"
+        shell: cmd
+
+      - name: Build plugin (Windows Release)
+        run: |
+          cmake --build %BUILD_DIR% --config %CMAKE_BUILD_TYPE%
+        shell: cmd
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-plugin-${{ env.STELLARIUM_TARGET }}-${{ env.CMAKE_BUILD_TYPE }}
+          path: |
+            ${{ env.BUILD_DIR }}/
+          if-no-files-found: warn

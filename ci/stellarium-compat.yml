@@ -1,0 +1,29 @@
+# Stellarium Windows compatibility mapping for CI
+# This file maps Stellarium Windows releases to specific Qt/MSVC toolchains
+# used by the Windows CI workflow.
+
+# Key of the default target to use when no explicit target is requested.
+# As of 2025-11-30, Stellarium 25.3 is the latest stable release.
+# For Windows x86_64 Qt6 builds, Stellarium 25.3 uses Qt 6.8.3 and MSVC 2022.
+# See the official Stellarium releases page for details.
+#   - stellarium-25.3-qt6-win64.exe: Qt 6.8.3, Visual Studio 2022
+#     (Windows 10+, x86_64)
+#
+# When Stellarium publishes a new stable Windows release and you decide to
+# support it, add a new entry under targets and update this default key.
+
+default: "25.3-qt6-win64"
+
+targets:
+  # Stellarium 25.3 for Windows (x86_64; Windows 10+) based on Qt 6.8.3
+  # with Visual Studio 2022 toolchain.
+  25.3-qt6-win64:
+    stellarium_version: "25.3"
+    platform: "windows-x86_64"
+    qt:
+      major: 6
+      version: "6.8.3"
+    msvc:
+      year: 2022
+      toolset: "v143"  # Visual Studio 2022 C++ toolset
+    notes: "Stellarium 25.3 Windows x86_64 Qt6 build (Windows 10+)."
