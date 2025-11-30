@@ -57,10 +57,10 @@ jobs:
 
       - name: Configure CMake (Windows)
         run: |
-          cmake -S . -B $env:BUILD_DIR ^
+          cmake -S . -B %BUILD_DIR% ^
             -G "Ninja" ^
-            -DCMAKE_BUILD_TYPE=$env:CMAKE_BUILD_TYPE ^
-            -DCMAKE_PREFIX_PATH="$env:Qt6_DIR"
+            -DCMAKE_BUILD_TYPE=%CMAKE_BUILD_TYPE% ^
+            -DCMAKE_PREFIX_PATH="%Qt6_DIR%"
         shell: cmd
 
       - name: Build plugin (Windows Release)
