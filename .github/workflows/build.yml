@@ -139,9 +139,7 @@ jobs:
           
           # Run Inno Setup from installer directory
           cd installers/windows
-          "C:/Program Files (x86)/Inno Setup 6/ISCC.exe" \
-            /DMyAppVersion="$VERSION" \
-            MoonAvoidance.iss
+          "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" /DMyAppVersion="$VERSION" MoonAvoidance.iss
             
       - name: Upload artifact
         uses: actions/upload-artifact@v4
