@@ -1,0 +1,115 @@
+name: Build Validation
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+    inputs:
+      stellarium_target:
+        description: "Target from ci/stellarium-compat.yml"
+        required: false
+        default: ""
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-macos:
+    name: Build macOS
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install PyYAML
+        run: pip install pyyaml
+        
+      - name: Resolve target
+        env:
+          REQUESTED_TARGET: ${{ github.event.inputs.stellarium_target }}
+        run: python ci/resolve_stellarium_compat.py
+        
+      - name: Install dependencies
+        run: |
+          brew install qt@6 cmake ninja ccache glm
+          
+      - name: Checkout Stellarium source (headers only)
+        uses: actions/checkout@v4
+        with:
+          repository: Stellarium/stellarium
+          ref: v${{ env.STELLARIUM_VERSION }}
+          path: stellarium-source
+          fetch-depth: 1
+          
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: macos-build-${{ env.STELLARIUM_VERSION }}
+          max-size: 500M
+          
+      - name: Configure and Build
+        run: |
+          export Qt6_DIR="$(brew --prefix qt@6)/lib/cmake/Qt6"
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="$(brew --prefix qt@6)" \
+            -DSTELROOT=stellarium-source \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          cmake --build build
+
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install PyYAML
+        run: pip install pyyaml
+        
+      - name: Resolve target
+        shell: bash
+        env:
+          REQUESTED_TARGET: ${{ github.event.inputs.stellarium_target }}
+        run: python ci/resolve_stellarium_compat.py
+        
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v3
+        with:
+          version: ${{ env.QT_VERSION }}
+          arch: ${{ env.WINDOWS_ARCH }}
+          cache: true
+          
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+          
+      - name: Checkout Stellarium source (headers only)
+        uses: actions/checkout@v4
+        with:
+          repository: Stellarium/stellarium
+          ref: v${{ env.STELLARIUM_VERSION }}
+          path: stellarium-source
+          fetch-depth: 1
+          
+      - name: Setup sccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: windows-build-${{ env.STELLARIUM_VERSION }}
+          variant: sccache
+          max-size: 500M
+          
+      - name: Configure and Build
+        shell: cmd
+        run: |
+          cmake -B build -G Ninja ^
+            -DCMAKE_BUILD_TYPE=Release ^
+            -DCMAKE_PREFIX_PATH="%QT_ROOT_DIR%" ^
+            -DSTELROOT=stellarium-source ^
+            -DCMAKE_C_COMPILER_LAUNCHER=sccache ^
+            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+          cmake --build build
+

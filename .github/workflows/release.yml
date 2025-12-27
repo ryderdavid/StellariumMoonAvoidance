@@ -1,0 +1,156 @@
+name: Release Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: Get version
+        id: get_version
+        run: |
+          if [[ $GITHUB_REF == refs/tags/v* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/v}
+          else
+            VERSION="0.0.0-manual"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Moon Avoidance v${{ steps.get_version.outputs.version }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+
+  build-macos:
+    name: Build macOS PKG
+    runs-on: macos-14
+    needs: create-release
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install PyYAML
+        run: pip install pyyaml
+        
+      - name: Resolve target
+        run: python ci/resolve_stellarium_compat.py
+        
+      - name: Install dependencies
+        run: brew install qt@6 cmake ninja
+        
+      - name: Checkout Stellarium source (headers only)
+        uses: actions/checkout@v4
+        with:
+          repository: Stellarium/stellarium
+          ref: v${{ env.STELLARIUM_VERSION }}
+          path: stellarium-source
+          fetch-depth: 1
+          
+      - name: Build
+        run: |
+          export Qt6_DIR="$(brew --prefix qt@6)/lib/cmake/Qt6"
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="$(brew --prefix qt@6)" \
+            -DSTELROOT=stellarium-source
+          cmake --build build
+          
+      - name: Package
+        run: |
+          mkdir -p staging/MoonAvoidance
+          cp build/libMoonAvoidance.dylib staging/MoonAvoidance/MoonAvoidance.dylib
+          cp plugin.ini staging/MoonAvoidance/
+          
+          # Create component package
+          pkgbuild --root staging \
+            --identifier org.stellarium.moonavoidance \
+            --version ${{ needs.create-release.outputs.version }} \
+            --install-location "$HOME/Library/Application Support/Stellarium/modules" \
+            MoonAvoidance-component.pkg
+            
+          # Create distribution package
+          productbuild --distribution installers/macos/Distribution.xml \
+            --package-path . \
+            --version ${{ needs.create-release.outputs.version }} \
+            MoonAvoidance-${{ needs.create-release.outputs.version }}-arm64.pkg
+            
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: MoonAvoidance-*.pkg
+
+  build-windows:
+    name: Build Windows EXE
+    runs-on: windows-latest
+    needs: create-release
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install PyYAML
+        run: pip install pyyaml
+        
+      - name: Resolve target
+        shell: bash
+        run: python ci/resolve_stellarium_compat.py
+        
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v3
+        with:
+          version: ${{ env.QT_VERSION }}
+          arch: ${{ env.WINDOWS_ARCH }}
+          cache: true
+          
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+          
+      - name: Checkout Stellarium source (headers only)
+        uses: actions/checkout@v4
+        with:
+          repository: Stellarium/stellarium
+          ref: v${{ env.STELLARIUM_VERSION }}
+          path: stellarium-source
+          fetch-depth: 1
+          
+      - name: Build
+        shell: cmd
+        run: |
+          cmake -B build -G Ninja ^
+            -DCMAKE_BUILD_TYPE=Release ^
+            -DCMAKE_PREFIX_PATH="%QT_ROOT_DIR%" ^
+            -DSTELROOT=stellarium-source
+          cmake --build build
+          
+      - name: Package
+        shell: bash
+        run: |
+          cp build/MoonAvoidance.dll .
+          cp plugin.ini .
+          
+          # Run Inno Setup
+          "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" \
+            /DMyAppVersion="${{ needs.create-release.outputs.version }}" \
+            installers/windows/MoonAvoidance.iss
+            
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: installers/windows/Output/*.exe
+

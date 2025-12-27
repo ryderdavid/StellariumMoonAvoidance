@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<installer-gui-script minSpecVersion="1">
+    <title>Moon Avoidance for Stellarium</title>
+    <organization>org.stellarium.moonavoidance</organization>
+    <domains enable_localSystem="false" enable_anywhere="false" enable_currentUserHome="true" />
+    <options customize="never" require-scripts="false" />
+    <choices-outline>
+        <line choice="default">
+            <line choice="org.stellarium.moonavoidance"/>
+        </line>
+    </choices-outline>
+    <choice id="default"/>
+    <choice id="org.stellarium.moonavoidance" visible="false">
+        <pkg-ref id="org.stellarium.moonavoidance"/>
+    </choice>
+    <pkg-ref id="org.stellarium.moonavoidance" auth="Root">MoonAvoidance-component.pkg</pkg-ref>
+</installer-gui-script>
+

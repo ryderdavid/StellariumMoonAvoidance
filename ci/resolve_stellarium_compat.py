@@ -47,7 +47,9 @@ def main() -> int:
 
     target = targets[target_key] or {}
     qt = target.get("qt") or {}
-    msvc = target.get("msvc") or {}
+    macos = target.get("macos") or {}
+    windows = target.get("windows") or {}
+    msvc = windows.get("msvc") or {}
 
     github_env = os.getenv("GITHUB_ENV")
     if not github_env:
@@ -62,13 +64,21 @@ def main() -> int:
     write_env("STELLARIUM_VERSION", target.get("stellarium_version", ""))
     write_env("QT_MAJOR", qt.get("major", ""))
     write_env("QT_VERSION", qt.get("version", ""))
+    
+    # macOS specific
+    write_env("MACOS_RUNNER", macos.get("runner", ""))
+    write_env("MACOS_ARCH", macos.get("arch", ""))
+    write_env("MACOS_DEPLOYMENT_TARGET", macos.get("deployment_target", ""))
+    
+    # Windows specific
+    write_env("WINDOWS_ARCH", windows.get("arch", ""))
     write_env("MSVC_YEAR", msvc.get("year", ""))
     write_env("MSVC_TOOLSET", msvc.get("toolset", ""))
 
     print(
         "Using Stellarium target: "
         f"{target_key} (Stellarium {target.get('stellarium_version')}, "
-        f"Qt {qt.get('version')}, MSVC {msvc.get('year')})"
+        f"Qt {qt.get('version')})"
     )
 
     return 0

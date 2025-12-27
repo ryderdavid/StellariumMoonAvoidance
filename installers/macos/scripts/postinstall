@@ -1,0 +1,13 @@
+#!/bin/bash
+
+# Ensure the Stellarium modules directory exists
+USER_MODULES_DIR="$HOME/Library/Application Support/Stellarium/modules/MoonAvoidance"
+
+mkdir -p "$USER_MODULES_DIR"
+
+# The files are actually installed by the pkg to the location specified in --install-location
+# If we want to move them or do something else, we do it here.
+# But for a simple plugin, the pkg install-location is usually sufficient.
+
+exit 0
+
