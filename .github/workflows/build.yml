@@ -31,9 +31,16 @@ jobs:
           REQUESTED_TARGET: ${{ github.event.inputs.stellarium_target }}
         run: python ci/resolve_stellarium_compat.py
         
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v3
+        with:
+          version: ${{ env.QT_VERSION }}
+          arch: clang_64
+          cache: true
+          
       - name: Install dependencies
         run: |
-          brew install qt@6 cmake ninja ccache glm
+          brew install cmake ninja ccache glm
           
       - name: Checkout Stellarium source (headers only)
         uses: actions/checkout@v4
@@ -51,10 +58,9 @@ jobs:
           
       - name: Configure and Build
         run: |
-          export Qt6_DIR="$(brew --prefix qt@6)/lib/cmake/Qt6"
           cmake -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_PREFIX_PATH="$(brew --prefix qt@6)" \
+            -DCMAKE_PREFIX_PATH="${{ env.QT_ROOT_DIR }}" \
             -DSTELROOT=stellarium-source \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
@@ -112,4 +118,3 @@ jobs:
             -DCMAKE_C_COMPILER_LAUNCHER=sccache ^
             -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
           cmake --build build
-

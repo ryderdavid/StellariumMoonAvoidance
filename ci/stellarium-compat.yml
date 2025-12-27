@@ -8,7 +8,7 @@ targets:
     stellarium_version: "25.3"
     qt:
       major: 6
-      version: "6.5.3"
+      version: "6.8.3"
     macos:
       runner: "macos-14"
       arch: "arm64"
@@ -18,4 +18,4 @@ targets:
       msvc:
         year: 2022
         toolset: "v143"
-    notes: "Stellarium 25.3 with Qt 6.5.3"
+    notes: "Stellarium 25.3 with Qt 6.8.3"

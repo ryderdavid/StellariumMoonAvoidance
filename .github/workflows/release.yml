@@ -51,8 +51,15 @@ jobs:
       - name: Resolve target
         run: python ci/resolve_stellarium_compat.py
         
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v3
+        with:
+          version: ${{ env.QT_VERSION }}
+          arch: clang_64
+          cache: true
+          
       - name: Install dependencies
-        run: brew install qt@6 cmake ninja
+        run: brew install cmake ninja
         
       - name: Checkout Stellarium source (headers only)
         uses: actions/checkout@v4
@@ -64,10 +71,9 @@ jobs:
           
       - name: Build
         run: |
-          export Qt6_DIR="$(brew --prefix qt@6)/lib/cmake/Qt6"
           cmake -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_PREFIX_PATH="$(brew --prefix qt@6)" \
+            -DCMAKE_PREFIX_PATH="${{ env.QT_ROOT_DIR }}" \
             -DSTELROOT=stellarium-source
           cmake --build build
           
@@ -81,7 +87,7 @@ jobs:
           pkgbuild --root staging \
             --identifier org.stellarium.moonavoidance \
             --version ${{ needs.create-release.outputs.version }} \
-            --install-location "$HOME/Library/Application Support/Stellarium/modules" \
+            --install-location "/Library/Application Support/Stellarium/modules" \
             MoonAvoidance-component.pkg
             
           # Create distribution package
@@ -153,4 +159,3 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: installers/windows/Output/*.exe
-
