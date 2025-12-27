@@ -18,41 +18,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Checkout Stellarium source
+      - name: Install dependencies
+        env:
+          HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: 1
+          HOMEBREW_NO_AUTO_UPDATE: 1
+        run: |
+          brew install qt@6 cmake ninja ccache
+          
+      - name: Checkout Stellarium source (headers only)
         uses: actions/checkout@v4
         with:
           repository: Stellarium/stellarium
           ref: v25.3
           path: stellarium-source
           fetch-depth: 1
-          
-      - name: Detect Stellarium's Qt version
-        id: detect-qt
-        run: |
-          cd stellarium-source
-          # Extract Qt version from Stellarium's CMakeLists.txt
-          QT_VERSION=$(grep -E "find_package\(Qt6" CMakeLists.txt | grep -oE "[0-9]+\.[0-9]+\.[0-9]+" | head -1)
-          if [ -z "$QT_VERSION" ]; then
-            QT_VERSION=$(grep -A5 "find_package(Qt6" CMakeLists.txt | grep -oE "[0-9]+\.[0-9]+\.[0-9]+" | head -1)
-          fi
-          if [ -z "$QT_VERSION" ]; then
-            echo "Could not detect Qt version, using 6.5.3 as fallback"
-            QT_VERSION="6.5.3"
-          fi
-          echo "Detected Qt version: $QT_VERSION"
-          echo "qt_version=$QT_VERSION" >> $GITHUB_OUTPUT
-          
-      - name: Install Qt
-        uses: jurplel/install-qt-action@v3
-        with:
-          version: ${{ steps.detect-qt.outputs.qt_version }}
-          host: mac
-          target: desktop
-          arch: clang_64
-          cache: true
-          
-      - name: Install dependencies
-        run: brew install cmake ninja ccache glm
           
       - name: Setup ccache
         uses: hendrikmuhs/ccache-action@v1.2
@@ -62,9 +41,10 @@ jobs:
           
       - name: Configure and Build
         run: |
+          export PATH="/opt/homebrew/opt/qt@6/bin:$PATH"
           cmake -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_PREFIX_PATH="${{ env.QT_ROOT_DIR }}" \
+            -DCMAKE_PREFIX_PATH="/opt/homebrew/opt/qt@6" \
             -DSTELROOT=stellarium-source \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
@@ -76,7 +56,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Checkout Stellarium source
+      - name: Checkout Stellarium source (headers only)
         uses: actions/checkout@v4
         with:
           repository: Stellarium/stellarium
@@ -84,27 +64,10 @@ jobs:
           path: stellarium-source
           fetch-depth: 1
           
-      - name: Detect Stellarium's Qt version
-        id: detect-qt
-        shell: bash
-        run: |
-          cd stellarium-source
-          # Extract Qt version from Stellarium's CMakeLists.txt
-          QT_VERSION=$(grep -E "find_package\(Qt6" CMakeLists.txt | grep -oE "[0-9]+\.[0-9]+\.[0-9]+" | head -1)
-          if [ -z "$QT_VERSION" ]; then
-            QT_VERSION=$(grep -A5 "find_package(Qt6" CMakeLists.txt | grep -oE "[0-9]+\.[0-9]+\.[0-9]+" | head -1)
-          fi
-          if [ -z "$QT_VERSION" ]; then
-            echo "Could not detect Qt version, using 6.5.3 as fallback"
-            QT_VERSION="6.5.3"
-          fi
-          echo "Detected Qt version: $QT_VERSION"
-          echo "qt_version=$QT_VERSION" >> $GITHUB_OUTPUT
-          
       - name: Install Qt
         uses: jurplel/install-qt-action@v3
         with:
-          version: ${{ steps.detect-qt.outputs.qt_version }}
+          version: '6.5.*'
           arch: win64_msvc2019_64
           cache: true
           
