@@ -131,14 +131,17 @@ jobs:
       - name: Package
         shell: bash
         run: |
-          cp build/MoonAvoidance.dll .
-          cp plugin.ini .
-          
           VERSION="dev-$(date +%Y%m%d-%H%M%S)"
           
+          # Copy files to installer directory
+          cp build/MoonAvoidance.dll installers/windows/
+          cp plugin.ini installers/windows/
+          
+          # Run Inno Setup from installer directory
+          cd installers/windows
           "C:/Program Files (x86)/Inno Setup 6/ISCC.exe" \
             /DMyAppVersion="$VERSION" \
-            installers/windows/MoonAvoidance.iss
+            MoonAvoidance.iss
             
       - name: Upload artifact
         uses: actions/upload-artifact@v4
