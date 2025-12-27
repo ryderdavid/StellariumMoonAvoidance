@@ -23,44 +23,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Install PyYAML
-        run: pip install pyyaml
-        
-      - name: Resolve target
-        env:
-          REQUESTED_TARGET: ${{ github.event.inputs.stellarium_target }}
-        run: python ci/resolve_stellarium_compat.py
-        
-      - name: Install Qt
-        uses: jurplel/install-qt-action@v3
-        with:
-          version: ${{ env.QT_VERSION }}
-          arch: clang_64
-          cache: true
-          
       - name: Install dependencies
         run: |
-          brew install cmake ninja ccache glm
+          brew install qt@6 cmake ninja ccache glm
           
       - name: Checkout Stellarium source (headers only)
         uses: actions/checkout@v4
         with:
           repository: Stellarium/stellarium
-          ref: v${{ env.STELLARIUM_VERSION }}
+          ref: v25.3
           path: stellarium-source
           fetch-depth: 1
           
       - name: Setup ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          key: macos-build-${{ env.STELLARIUM_VERSION }}
+          key: macos-build-25.3
           max-size: 500M
           
       - name: Configure and Build
         run: |
           cmake -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_PREFIX_PATH="${{ env.QT_ROOT_DIR }}" \
+            -DCMAKE_PREFIX_PATH="$(brew --prefix qt@6)" \
             -DSTELROOT=stellarium-source \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
@@ -72,20 +57,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Install PyYAML
-        run: pip install pyyaml
-        
-      - name: Resolve target
-        shell: bash
-        env:
-          REQUESTED_TARGET: ${{ github.event.inputs.stellarium_target }}
-        run: python ci/resolve_stellarium_compat.py
-        
       - name: Install Qt
         uses: jurplel/install-qt-action@v3
         with:
-          version: ${{ env.QT_VERSION }}
-          arch: ${{ env.WINDOWS_ARCH }}
+          version: '6.5.*'
+          arch: win64_msvc2019_64
           cache: true
           
       - name: Setup MSVC
@@ -97,14 +73,14 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: Stellarium/stellarium
-          ref: v${{ env.STELLARIUM_VERSION }}
+          ref: v25.3
           path: stellarium-source
           fetch-depth: 1
           
       - name: Setup sccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          key: windows-build-${{ env.STELLARIUM_VERSION }}
+          key: windows-build-25.3
           variant: sccache
           max-size: 500M
           
