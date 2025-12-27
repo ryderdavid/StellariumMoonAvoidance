@@ -42,3 +42,6 @@ tests/*.o
 # Logs
 *.log
 
+# Stellarium source (cloned during CI)
+stellarium-source/
+
