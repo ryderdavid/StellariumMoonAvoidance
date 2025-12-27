@@ -67,14 +67,23 @@ jobs:
           echo "Detected Qt version: $QT_VERSION"
           echo "qt_version=$QT_VERSION" >> $GITHUB_OUTPUT
           
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v3
+        with:
+          version: ${{ steps.detect-qt.outputs.qt_version }}
+          host: mac
+          target: desktop
+          arch: clang_64
+          cache: true
+          
       - name: Install dependencies
-        run: brew install qt@6 cmake ninja
+        run: brew install cmake ninja
         
       - name: Build
         run: |
           cmake -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_PREFIX_PATH="$(brew --prefix qt@6)" \
+            -DCMAKE_PREFIX_PATH="${{ env.QT_ROOT_DIR }}" \
             -DSTELROOT=stellarium-source
           cmake --build build
           

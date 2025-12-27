@@ -33,7 +33,6 @@ jobs:
           # Extract Qt version from Stellarium's CMakeLists.txt
           QT_VERSION=$(grep -E "find_package\(Qt6" CMakeLists.txt | grep -oE "[0-9]+\.[0-9]+\.[0-9]+" | head -1)
           if [ -z "$QT_VERSION" ]; then
-            # Fallback: check for VERSION or REQUIRED patterns
             QT_VERSION=$(grep -A5 "find_package(Qt6" CMakeLists.txt | grep -oE "[0-9]+\.[0-9]+\.[0-9]+" | head -1)
           fi
           if [ -z "$QT_VERSION" ]; then
@@ -43,10 +42,17 @@ jobs:
           echo "Detected Qt version: $QT_VERSION"
           echo "qt_version=$QT_VERSION" >> $GITHUB_OUTPUT
           
-      - name: Install Qt and dependencies
-        run: |
-          # Install Qt via Homebrew (will get latest 6.x, which is fine for dynamic plugin)
-          brew install qt@6 cmake ninja ccache glm
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v3
+        with:
+          version: ${{ steps.detect-qt.outputs.qt_version }}
+          host: mac
+          target: desktop
+          arch: clang_64
+          cache: true
+          
+      - name: Install dependencies
+        run: brew install cmake ninja ccache glm
           
       - name: Setup ccache
         uses: hendrikmuhs/ccache-action@v1.2
@@ -58,7 +64,7 @@ jobs:
         run: |
           cmake -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_PREFIX_PATH="$(brew --prefix qt@6)" \
+            -DCMAKE_PREFIX_PATH="${{ env.QT_ROOT_DIR }}" \
             -DSTELROOT=stellarium-source \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
