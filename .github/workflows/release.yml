@@ -45,10 +45,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Install dependencies
-        run: brew install qt@6 cmake ninja
-        
-      - name: Checkout Stellarium source (headers only)
+      - name: Checkout Stellarium source
         uses: actions/checkout@v4
         with:
           repository: Stellarium/stellarium
@@ -56,6 +53,23 @@ jobs:
           path: stellarium-source
           fetch-depth: 1
           
+      - name: Detect Stellarium's Qt version
+        id: detect-qt
+        run: |
+          cd stellarium-source
+          QT_VERSION=$(grep -E "find_package\(Qt6" CMakeLists.txt | grep -oE "[0-9]+\.[0-9]+\.[0-9]+" | head -1)
+          if [ -z "$QT_VERSION" ]; then
+            QT_VERSION=$(grep -A5 "find_package(Qt6" CMakeLists.txt | grep -oE "[0-9]+\.[0-9]+\.[0-9]+" | head -1)
+          fi
+          if [ -z "$QT_VERSION" ]; then
+            QT_VERSION="6.5.3"
+          fi
+          echo "Detected Qt version: $QT_VERSION"
+          echo "qt_version=$QT_VERSION" >> $GITHUB_OUTPUT
+          
+      - name: Install dependencies
+        run: brew install qt@6 cmake ninja
+        
       - name: Build
         run: |
           cmake -B build -G Ninja \
@@ -70,14 +84,12 @@ jobs:
           cp build/libMoonAvoidance.dylib staging/MoonAvoidance/MoonAvoidance.dylib
           cp plugin.ini staging/MoonAvoidance/
           
-          # Create component package
           pkgbuild --root staging \
             --identifier org.stellarium.moonavoidance \
             --version ${{ needs.create-release.outputs.version }} \
             --install-location "/Library/Application Support/Stellarium/modules" \
             MoonAvoidance-component.pkg
             
-          # Create distribution package
           productbuild --distribution installers/macos/Distribution.xml \
             --package-path . \
             --version ${{ needs.create-release.outputs.version }} \
@@ -95,10 +107,33 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
+      - name: Checkout Stellarium source
+        uses: actions/checkout@v4
+        with:
+          repository: Stellarium/stellarium
+          ref: v25.3
+          path: stellarium-source
+          fetch-depth: 1
+          
+      - name: Detect Stellarium's Qt version
+        id: detect-qt
+        shell: bash
+        run: |
+          cd stellarium-source
+          QT_VERSION=$(grep -E "find_package\(Qt6" CMakeLists.txt | grep -oE "[0-9]+\.[0-9]+\.[0-9]+" | head -1)
+          if [ -z "$QT_VERSION" ]; then
+            QT_VERSION=$(grep -A5 "find_package(Qt6" CMakeLists.txt | grep -oE "[0-9]+\.[0-9]+\.[0-9]+" | head -1)
+          fi
+          if [ -z "$QT_VERSION" ]; then
+            QT_VERSION="6.5.3"
+          fi
+          echo "Detected Qt version: $QT_VERSION"
+          echo "qt_version=$QT_VERSION" >> $GITHUB_OUTPUT
+          
       - name: Install Qt
         uses: jurplel/install-qt-action@v3
         with:
-          version: '6.5.*'
+          version: ${{ steps.detect-qt.outputs.qt_version }}
           arch: win64_msvc2019_64
           cache: true
           
@@ -106,14 +141,6 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
-          
-      - name: Checkout Stellarium source (headers only)
-        uses: actions/checkout@v4
-        with:
-          repository: Stellarium/stellarium
-          ref: v25.3
-          path: stellarium-source
-          fetch-depth: 1
           
       - name: Build
         shell: cmd
@@ -126,17 +153,14 @@ jobs:
           
       - name: Install Inno Setup
         shell: powershell
-        run: |
-          choco install innosetup -y
+        run: choco install innosetup -y
           
       - name: Package
         shell: bash
         run: |
           cp build/MoonAvoidance.dll .
           cp plugin.ini .
-          
-          # Run Inno Setup
-          "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" \
+          "C:/Program Files (x86)/Inno Setup 6/ISCC.exe" \
             /DMyAppVersion="${{ needs.create-release.outputs.version }}" \
             installers/windows/MoonAvoidance.iss
             
