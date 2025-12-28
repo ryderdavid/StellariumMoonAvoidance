@@ -21,7 +21,7 @@
 
 MoonAvoidance::MoonAvoidance()
 	: config(nullptr)
-	, configDialog(new MoonAvoidanceDialog())
+	, configDialog(nullptr)  // Don't create dialog in constructor - create lazily when needed
 	, enabled(false)
 	, lastMoonAltitude(0.0)
 	, lastMoonAgeDays(0.0)
@@ -37,16 +37,17 @@ MoonAvoidance::~MoonAvoidance()
 	{
 		configDialog->disconnect(this);
 		
+		// Safely close dialog only if it's visible and initialized
+		// Don't call close() if dialog was never shown, as it may not be fully initialized
+		if (configDialog->visible())
+		{
+			configDialog->setVisible(false);
+		}
+		
 		// Manually delete the dialog if it hasn't been parented to something else
 		// Note: If the dialog was added to the StelGui, it might be deleted by Qt's object tree
-		// But since we created it with 'new MoonAvoidanceDialog()', it likely has no parent initially
-		// or was parented to something else later.
-		// Check if it's still valid and delete if necessary
 		if (configDialog->parent() == nullptr) {
 			delete configDialog;
-		} else {
-			// If it has a parent, let the parent delete it, but ensure it's hidden/closed first
-			configDialog->close();
 		}
 		configDialog = nullptr;
 	}
@@ -128,25 +129,7 @@ void MoonAvoidance::init()
 		qWarning() << "MoonAvoidance: Config load failed, using and saving defaults";
 	}
 	
-	// Connect to dialog's visibleChanged signal to save when closed with OK
-	// Do this after config is initialized
-	if (configDialog)
-	{
-		connect(configDialog, &StelDialog::visibleChanged, this, [this](bool visible) {
-			if (!visible && config && configDialog && configDialog->wasAccepted())
-			{
-				// Dialog was closed with OK - save configuration
-				QList<FilterConfig> newFilters = configDialog->getFilters();
-				if (!newFilters.isEmpty())
-				{
-					config->setFilters(newFilters);
-					config->saveConfiguration();
-					qDebug() << "MoonAvoidance: Configuration saved";
-				}
-			}
-		});
-	}
-
+	// Dialog will be created lazily when first shown
 	qDebug() << "MoonAvoidance plugin initialized";
 }
 
@@ -1279,6 +1262,29 @@ void MoonAvoidance::showConfigurationDialog()
 	qDebug() << "MoonAvoidance: Config is valid";
 	
 	// Get current filters safely before showing dialog
+	// Create dialog lazily if it doesn't exist yet
+	if (!configDialog)
+	{
+		configDialog = new MoonAvoidanceDialog();
+		
+		// Connect to dialog's visibleChanged signal to save when closed with OK
+		connect(configDialog, &StelDialog::visibleChanged, this, [this](bool visible) {
+			if (!visible && config && configDialog && configDialog->wasAccepted())
+			{
+				// Dialog was closed with OK - save configuration
+				QList<FilterConfig> newFilters = configDialog->getFilters();
+				if (!newFilters.isEmpty())
+				{
+					config->setFilters(newFilters);
+					config->saveConfiguration();
+					qDebug() << "MoonAvoidance: Configuration saved on dialog close";
+				}
+			}
+		});
+		
+		qDebug() << "MoonAvoidance: Dialog created lazily";
+	}
+	
 	QList<FilterConfig> filters;
 	try {
 		filters = config->getFilters();
