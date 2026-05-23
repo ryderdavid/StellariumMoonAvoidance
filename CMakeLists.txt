@@ -31,7 +31,9 @@ if(NOT CMAKE_PREFIX_PATH)
     message(FATAL_ERROR "CMAKE_PREFIX_PATH is not defined. Please set it to your Qt installation path (e.g. -DCMAKE_PREFIX_PATH=/path/to/Qt/${REQUIRED_QT_VERSION}/platform)")
 endif()
 
-find_package(Qt6 ${REQUIRED_QT_VERSION} EXACT REQUIRED COMPONENTS Core Widgets)
+# For dynamic plugins, we accept any Qt 6.x version for compilation
+# At runtime, the plugin will use Stellarium's bundled Qt
+find_package(Qt6 REQUIRED COMPONENTS Core Widgets)
 
 # Try to find Stellarium
 if(STELROOT)

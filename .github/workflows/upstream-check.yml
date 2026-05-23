@@ -1,0 +1,93 @@
+name: Upstream Drift Check
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  check-compat:
+    name: Check Compatibility
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install PyYAML
+        run: pip install pyyaml
+        
+      - name: Resolve target
+        run: python ci/resolve_stellarium_compat.py
+        
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build qt6-base-dev qt6-base-private-dev libgl1-mesa-dev libglm-dev
+          
+      - name: Checkout Stellarium target version
+        uses: actions/checkout@v4
+        with:
+          repository: Stellarium/stellarium
+          ref: v${{ env.STELLARIUM_VERSION }}
+          path: stellarium-target
+          fetch-depth: 1
+          
+      - name: Checkout Stellarium master
+        uses: actions/checkout@v4
+        with:
+          repository: Stellarium/stellarium
+          ref: master
+          path: stellarium-master
+          fetch-depth: 1
+          
+      - name: Test compile against target
+        id: test-target
+        run: |
+          cmake -B build-target -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DSTELROOT=stellarium-target
+          cmake --build build-target || echo "FAILED_TARGET=true" >> $GITHUB_OUTPUT
+          
+      - name: Test compile against master
+        id: test-master
+        run: |
+          cmake -B build-master -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DSTELROOT=stellarium-master
+          cmake --build build-master || echo "FAILED_MASTER=true" >> $GITHUB_OUTPUT
+          
+      - name: Create issue on failure
+        if: steps.test-target.outputs.FAILED_TARGET == 'true' || steps.test-master.outputs.FAILED_MASTER == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const failedTarget = '${{ steps.test-target.outputs.FAILED_TARGET }}' === 'true';
+            const failedMaster = '${{ steps.test-master.outputs.FAILED_MASTER }}' === 'true';
+            
+            let title = '⚠️ Upstream Compatibility Drift Detected';
+            let body = 'The daily compatibility check has detected failures:\n\n';
+            
+            if (failedTarget) {
+              body += '- ❌ Compilation failed against target version **v${{ env.STELLARIUM_VERSION }}**\n';
+            }
+            if (failedMaster) {
+              body += '- ❌ Compilation failed against Stellarium **master** branch\n';
+            }
+            
+            body += '\n**Action Required:**\n';
+            body += '1. Check the [workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details.\n';
+            body += '2. Update the plugin code to match upstream changes if necessary.\n';
+            
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: title,
+              body: body,
+              labels: ['upstream-drift', 'bug']
+            });
+
+
+
+
