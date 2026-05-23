@@ -42,3 +42,10 @@ tests/*.o
 # Logs
 *.log
 
+# Stellarium source (cloned during CI)
+stellarium-source/
+
+
+# Local debug logs
+full_log.txt
+run_logs.txt
