@@ -16,3 +16,6 @@
     <pkg-ref id="org.stellarium.moonavoidance" auth="Root">MoonAvoidance-component.pkg</pkg-ref>
 </installer-gui-script>
 
+
+
+

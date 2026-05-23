@@ -27,3 +27,6 @@ Source: "plugin.ini"; DestDir: "{app}"; Flags: ignoreversion
 [Messages]
 FinishedLabel=Moon Avoidance has been installed successfully. [newline][newline]Please restart Stellarium and enable the plugin in the Configuration window (F2) -> Plugins.
 
+
+
+
