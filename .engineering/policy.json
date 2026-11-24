@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "repo": "ryderdavid/StellariumMoonAvoidance",
+  "bead_prefix": "moon",
+  "openspec": "1.15.0",
+  "beads": "1.2.2"
+}

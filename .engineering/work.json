@@ -1,0 +1,26 @@
+{
+  "schema": 1,
+  "stage": "governance-bootstrap",
+  "bead": "moon-7b2.1",
+  "change": "bootstrap-governance",
+  "scope": "governance",
+  "base": "9dbd53c969ae4b57c896953e563fcc61c4f8b338",
+  "journal": [
+    {
+      "schema": 1,
+      "event_id": "event-ffe993f7656e2d1d1cbd726129ef4524",
+      "digest": "0d9b020c8b92709536609aa1306d6cbe7fb91a952012272fe67fb9b8ecda688e",
+      "state": "verified",
+      "kind": "start",
+      "payload_digest": "d553a029360a327969fd32c05f8600284eca4cd2b4aa9d49c18426994ecfefb3"
+    },
+    {
+      "schema": 1,
+      "event_id": "event-bc43388f0ad73916070268c37ed3c265",
+      "digest": "05f5eaa7f4bac496d5554d2d3a9514a9759886654cb0d37d3fb80c9676e268ff",
+      "state": "verified",
+      "kind": "failure",
+      "payload_digest": "1db933927baddb169494ac3d72812c7a170ff985b3b06e531554c397c0bd094f"
+    }
+  ]
+}

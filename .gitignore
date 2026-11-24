@@ -42,3 +42,12 @@ tests/*.o
 # Logs
 *.log
 
+
+# Engineering local state (private journal outbox must be outside this repository)
+__pycache__/
+*.pyc
+.engineering-local/
+.beads/*
+!.beads/.gitignore
+!.beads/config.yaml
+!.beads/README.md
