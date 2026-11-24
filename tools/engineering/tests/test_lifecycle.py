@@ -20,8 +20,9 @@ class JournalTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'pending'):journal.deliver(self.p,self.out,[])
         self.assertEqual(len(list(self.out.glob('*.json'))),1)
         r=journal.deliver(self.p,self.out,self.command);self.assertTrue(journal.verified(r,self.out))
-        self.assertEqual(self.out.stat().st_mode & 0o777,0o700)
-        self.assertEqual((self.out/(r['event_id']+'.json')).stat().st_mode & 0o777,0o600)
+        if os.name!='nt':  # Windows uses inherited user-profile ACLs, not POSIX modes.
+            self.assertEqual(self.out.stat().st_mode & 0o777,0o700)
+            self.assertEqual((self.out/(r['event_id']+'.json')).stat().st_mode & 0o777,0o600)
     def test_failed_adapter_does_not_acknowledge(self):
         with self.assertRaisesRegex(ValueError,'pending'):journal.deliver(self.p,self.out,[sys.executable,'-c','raise SystemExit(1)'])
         self.assertFalse(list(self.out.glob('*.ack.json')))
@@ -80,6 +81,10 @@ class GateTests(unittest.TestCase):
     def test_product_scope_cannot_hide_product_diff(self):
         self.put('product.cpp','changed');self.commit()
         with self.assertRaisesRegex(AssertionError,'product diff'):gate.validate_record(self.w)
+    @unittest.skipIf(os.name=='nt','Creating a Windows symlink requires a separate host privilege')
+    def test_snapshot_matches_git_symlink_content(self):
+        (self.root/'link').symlink_to('AGENTS.md');self.commit()
+        self.assertEqual(gate.snapshot(),gate.snapshot('HEAD'))
     def test_stale_evidence_rejected(self):
         w=dict(self.w,evidence={'payload_digest':'f'*64,'commands':[{'command':'test','result':'passed'}]})
         with self.assertRaisesRegex(AssertionError,'stale'):gate.evidence(w)

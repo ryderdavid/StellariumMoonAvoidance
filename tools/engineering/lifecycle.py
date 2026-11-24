@@ -24,7 +24,7 @@ def snapshot(revision=None):
         read=lambda p:subprocess.check_output(['git','show',revision+':'+p],cwd=ROOT)
     else:
         names=git('ls-files','--cached','--others','--exclude-standard').splitlines()
-        read=lambda p:(ROOT/p).read_bytes()
+        read=lambda p:os.readlink(ROOT/p).encode() if (ROOT/p).is_symlink() else (ROOT/p).read_bytes()
     h=hashlib.sha256()
     for p in sorted(set(names)):
         if excluded(p):continue
