@@ -104,6 +104,10 @@ class GateTests(unittest.TestCase):
         w=dict(self.w,journal=[dict(r,kind='start'),r]);gate.receipt_check(w,False)
         w['journal'][-1]['payload_digest']='b'*64
         with self.assertRaisesRegex(AssertionError,'cover revision'):gate.receipt_check(w,False)
+    def test_superseded_completion_is_preserved_as_history(self):
+        r={'schema':1,'event_id':'event-'+'a'*32,'digest':'a'*64,'state':'verified','kind':'complete','payload_digest':gate.snapshot('HEAD')}
+        old=dict(r,event_id='event-'+'b'*32,payload_digest='c'*64)
+        gate.receipt_check(dict(self.w,journal=[dict(r,kind='start'),old,r]),False)
     def test_public_claim_insufficient_for_trusted_completion(self):
         r={'schema':1,'event_id':'event-'+'a'*32,'digest':'a'*64,'state':'verified','kind':'complete','payload_digest':gate.snapshot('HEAD')}
         with patch.dict(os.environ,{'ENGINEERING_OUTBOX':str(self.root/'not-present')}),self.assertRaisesRegex(AssertionError,'acknowledgement'):

@@ -100,7 +100,7 @@ def receipt_check(w,trusted):
         assert r['kind'] in ('start','decision','failure','blocked','complete'),'invalid receipt kind'
         assert HEX.fullmatch(r['digest']) and HEX.fullmatch(r['payload_digest']),'invalid digest'
         assert r['state']=='verified','journal incomplete'
-        if r['kind']=='complete':assert r['payload_digest']==snapshot('HEAD'),'receipt does not cover revision'
+        if r is completed[-1]:assert r['payload_digest']==snapshot('HEAD'),'receipt does not cover revision'
         if trusted:
             assert verified(r,os.environ['ENGINEERING_OUTBOX']),'private readback acknowledgement missing'
 
