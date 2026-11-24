@@ -1,0 +1,11 @@
+schema: spec-driven
+context: |
+  Brownfield project: label source-observed, executed, intended and unknown separately.
+  Beads owns work and dependencies. OpenSpec tasks are spec implementation evidence.
+  Do not claim plugin loading, geometry correctness or GUI success without actual evidence.
+  This bootstrap changes engineering infrastructure only.
+rules:
+  proposal:
+    - Include linked Bead IDs and explicit boundaries.
+  design:
+    - Document trust boundaries and failure behavior.
