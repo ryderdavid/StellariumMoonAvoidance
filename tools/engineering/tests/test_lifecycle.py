@@ -1,8 +1,14 @@
-import concurrent.futures,contextlib,copy,datetime,hashlib,io,json,os,pathlib,shlex,subprocess,sys,tempfile,unittest
+import concurrent.futures,contextlib,copy,datetime,hashlib,io,json,os,pathlib,shlex,shutil,subprocess,sys,tempfile,unittest
 from unittest.mock import patch
 sys.path.insert(0,str(pathlib.Path(__file__).resolve().parents[1]))
 import journal
 import lifecycle as gate
+
+def bash():
+    if os.name=='nt':
+        candidate=pathlib.Path(shutil.which('git')).resolve().parents[1]/'bin/bash.exe'
+        if candidate.exists():return str(candidate)
+    return shutil.which('bash') or 'bash'
 
 class JournalTests(unittest.TestCase):
     def setUp(self):
@@ -81,10 +87,14 @@ class GateTests(unittest.TestCase):
     def test_product_scope_cannot_hide_product_diff(self):
         self.put('product.cpp','changed');self.commit()
         with self.assertRaisesRegex(AssertionError,'product diff'):gate.validate_record(self.w)
-    @unittest.skipIf(os.name=='nt','Creating a Windows symlink requires a separate host privilege')
     def test_snapshot_matches_git_symlink_content(self):
-        (self.root/'link').symlink_to('AGENTS.md');self.commit()
-        self.assertEqual(gate.snapshot(),gate.snapshot('HEAD'))
+        blob=subprocess.check_output(['git','hash-object','-w','--stdin'],cwd=self.root,input=b'AGENTS.md').decode().strip()
+        self.git('update-index','--add','--cacheinfo','120000,'+blob+',link')
+        # Git's stored object is a target string even on a Windows checkout.
+        self.assertEqual(subprocess.check_output(['git','show',':link'],cwd=self.root),b'AGENTS.md')
+        if os.name!='nt':
+            (self.root/'link').symlink_to('AGENTS.md');self.commit()
+            self.assertEqual(gate.snapshot(),gate.snapshot('HEAD'))
     def test_stale_evidence_rejected(self):
         w=dict(self.w,evidence={'payload_digest':'f'*64,'commands':[{'command':'test','result':'passed'}]})
         with self.assertRaisesRegex(AssertionError,'stale'):gate.evidence(w)
@@ -127,14 +137,14 @@ class GateTests(unittest.TestCase):
         script='import sys,pathlib\np=pathlib.Path("hook-input")\np.write_text(sys.stdin.read())\n'
         self.put('tools/engineering/lifecycle.py',script)
         hp=pathlib.Path(self.git('config','--get','core.hooksPath'))
-        subprocess.run(['bash',str(hp/'pre-push'),'origin','url'],cwd=self.root,input='ref sha remote sha\n',text=True,check=True)
+        subprocess.run([bash(),(hp/'pre-push').as_posix(),'origin','url'],cwd=self.root,input='ref sha remote sha\n',text=True,check=True)
         self.assertEqual((self.root/'pre-push.input').read_text(),(self.root/'hook-input').read_text())
-        subprocess.run(['bash',str(hp/'post-checkout')],cwd=self.root,check=True)
+        subprocess.run([bash(),(hp/'post-checkout').as_posix()],cwd=self.root,check=True)
         self.assertIn('post-checkout',(self.root/'calls').read_text())
     def test_existing_hook_failure_stops_lifecycle(self):
         hooks=self.root/'old-hooks';hooks.mkdir();f=hooks/'pre-commit';f.write_text('#!/bin/sh\nexit 7\n');f.chmod(0o755)
         self.git('config','core.hooksPath',str(hooks));gate.bootstrap_hooks()
-        p=subprocess.run(['bash',self.git('config','--get','core.hooksPath')+'/pre-commit'],cwd=self.root)
+        p=subprocess.run([bash(),(pathlib.Path(self.git('config','--get','core.hooksPath'))/'pre-commit').as_posix()],cwd=self.root)
         self.assertEqual(p.returncode,7)
 
 if __name__=='__main__':unittest.main()

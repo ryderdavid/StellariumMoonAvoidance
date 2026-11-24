@@ -38,7 +38,12 @@ def deliver(payload,outbox,adapter):
     # Durable private ack: public receipt is insufficient for trusted completion.
     fd,tmp=tempfile.mkstemp(dir=outbox,prefix='.ack-')
     with os.fdopen(fd,'w') as f:json.dump(receipt,f);f.flush();os.fsync(f.fileno())
-    os.replace(tmp,outbox/(eid+'.ack.json'))
+    ackpath=outbox/(eid+'.ack.json')
+    try:
+        try:os.link(tmp,ackpath)
+        except FileExistsError:
+            if json.loads(ackpath.read_text())!=receipt:raise ValueError('immutable acknowledgement conflict')
+    finally:os.unlink(tmp)
     return receipt
 
 def verified(receipt,outbox):
